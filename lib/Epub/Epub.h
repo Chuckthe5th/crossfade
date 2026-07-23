@@ -45,6 +45,11 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  // Lightweight alternative to load(true, ...) for a book that has never been
+  // opened: parses content.opf for title/author/cover only (no spine/TOC, no
+  // book.bin written), then generateThumbBmp() works normally off the result.
+  // Returns true immediately if a real or metadata-only cache is already loaded.
+  bool loadMetadataOnly();
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

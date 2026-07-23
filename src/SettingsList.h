@@ -173,6 +173,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "uiTheme", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(StrId::STR_HOME_SCREEN_STYLE, &CrossPointSettings::homeScreenStyle,
+                          {StrId::STR_HOME_SCREEN_STOCK, StrId::STR_HOME_SCREEN_GRID}, "homeScreenStyle",
+                          StrId::STR_CAT_DISPLAY),
 
         // --- Reader ---
         // Built-in font-family entry. Replaced per-call with a registry-aware

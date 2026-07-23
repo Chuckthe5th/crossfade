@@ -5,10 +5,12 @@
 
 #include <algorithm>
 
+#include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "home/CoverGridHomeActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -238,7 +240,14 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
+  if (SETTINGS.homeScreenStyle == CrossPointSettings::HOME_SCREEN_COVER_GRID) {
+    // The grid always lands on the last-read book; it has no concept of "return
+    // to this menu section" (its own Back popup replaces that), so initialMenuItem
+    // is intentionally not passed through.
+    replaceActivity(std::make_unique<CoverGridHomeActivity>(renderer, mappedInput));
+  } else {
+    replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
+  }
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 

@@ -501,6 +501,23 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
+bool Epub::loadMetadataOnly() {
+  if (bookMetadataCache && bookMetadataCache->isLoaded()) {
+    return true;
+  }
+
+  BookMetadataCache::BookMetadata metadata;
+  if (!parseContentOpf(metadata, /*writeSpineEntries=*/false)) {
+    LOG_ERR("EBP", "Could not parse content.opf for metadata-only load");
+    return false;
+  }
+
+  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  bookMetadataCache->setMetadataOnly(metadata);
+  LOG_DBG("EBP", "Loaded metadata-only ePub: %s", filepath.c_str());
+  return true;
+}
+
 bool Epub::clearCache() const {
   if (!Storage.exists(cachePath.c_str())) {
     LOG_DBG("EPB", "Cache does not exist, no action needed");

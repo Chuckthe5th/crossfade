@@ -486,6 +486,13 @@ bool BookMetadataCache::load() {
   return true;
 }
 
+void BookMetadataCache::setMetadataOnly(const BookMetadata& metadata) {
+  coreMetadata = metadata;
+  spineCount = 0;
+  tocCount = 0;
+  loaded = true;
+}
+
 BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) {
   if (!loaded) {
     LOG_ERR("BMC", "getSpineEntry called but cache not loaded");
