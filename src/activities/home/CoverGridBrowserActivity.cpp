@@ -38,6 +38,21 @@ std::string filenameWithoutExtension(const std::string& path) {
   }
   return path.substr(start, end - start);
 }
+
+// Mirrors GfxRenderer::drawBitmap1Bit's own fit-within-box scale calculation
+// (shrink-only, bound by whichever dimension needs it more) so the caller can
+// compute the resulting drawn size and center it -- drawBitmap1Bit itself always
+// top-left anchors at the (x, y) it's given.
+float fitScale(int srcW, int srcH, int maxW, int maxH) {
+  float scale = 1.0f;
+  if (maxW > 0 && srcW > maxW) {
+    scale = static_cast<float>(maxW) / static_cast<float>(srcW);
+  }
+  if (maxH > 0 && srcH > maxH) {
+    scale = std::min(scale, static_cast<float>(maxH) / static_cast<float>(srcH));
+  }
+  return scale;
+}
 }  // namespace
 
 void CoverGridBrowserActivity::computeGridGeometry() {
@@ -267,19 +282,30 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
       if (Storage.openFileForRead("CGB", cell.coverThumbPath, file)) {
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderer.drawBitmap1Bit(bitmap, innerX, innerY, innerW, coverHeight);
+          // Center the cover in its box: drawBitmap1Bit only ever shrinks (never
+          // stretches) to fit maxWidth/maxHeight, binding on whichever dimension
+          // needs it more, so a cover whose aspect ratio doesn't match the cell's
+          // is left/top anchored unless we offset the origin ourselves.
+          const float scale = fitScale(bitmap.getWidth(), bitmap.getHeight(), innerW, coverHeight);
+          const int renderedW = static_cast<int>(bitmap.getWidth() * scale);
+          const int renderedH = static_cast<int>(bitmap.getHeight() * scale);
+          const int coverX = innerX + (innerW - renderedW) / 2;
+          const int coverY = innerY + (coverHeight - renderedH) / 2;
+          renderer.drawBitmap1Bit(bitmap, coverX, coverY, innerW, coverHeight);
           drewCover = true;
         }
       }
     }
   }
 
-  if (drewCover) {
-    renderer.drawRect(innerX, innerY, innerW, coverHeight);
-  } else if (selected) {
-    renderer.fillRect(innerX, innerY, innerW, coverHeight);
-  } else {
-    renderer.drawRect(innerX, innerY, innerW, coverHeight);
+  // The outlined/filled card is the no-cover fallback only -- a cell with a real
+  // cover gets no frame around it.
+  if (!drewCover) {
+    if (selected) {
+      renderer.fillRect(innerX, innerY, innerW, coverHeight);
+    } else {
+      renderer.drawRect(innerX, innerY, innerW, coverHeight);
+    }
   }
 
   if (!title.empty()) {

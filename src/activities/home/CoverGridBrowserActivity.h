@@ -46,6 +46,9 @@ class CoverGridBrowserActivity final : public Activity {
   void ensurePageLoaded();
   void resolveCell(const std::string& path, GridCell& cell) const;
   void drawCell(int flatIndex, int x, int y, bool selected) const;
+  // 2D analogue of Activity::handleListTouch() for a grid instead of a 1D list:
+  // maps a touch point to a flat book index via cellWidth/cellHeight/gridLeft/
+  // gridTop. Untested on hardware -- no C3 target (X3/X4) has touch.
   int hitTestCell(int tx, int ty) const;
 
  public:
