@@ -18,7 +18,12 @@ class CoverGridBrowserActivity final : public Activity {
     bool hasCover = false;
   };
 
+  // Two independent axes: buttonNavigator (side Up/Down) moves by row and owns
+  // the long-press page jump; columnNavigator (front Left/Right) moves within
+  // the current row. Kept separate so ButtonNavigator's held-time bookkeeping
+  // for one axis's continuous-hold detection can't interfere with the other's.
   ButtonNavigator buttonNavigator;
+  ButtonNavigator columnNavigator;
 
   std::vector<LibraryScanner::Entry> books;
   int selectedIndex = 0;
@@ -46,6 +51,13 @@ class CoverGridBrowserActivity final : public Activity {
   void ensurePageLoaded();
   void resolveCell(const std::string& path, GridCell& cell) const;
   void drawCell(int flatIndex, int x, int y, bool selected) const;
+  // Row/column stepping over the flattened book list, treated as a grid of
+  // `cols` columns where only the last row may be short. Both row steps wrap
+  // (bottom row wraps to row 0 same column and vice versa); column steps wrap
+  // within the current row only, never crossing into another row.
+  int stepRowDown() const;
+  int stepRowUp() const;
+  int stepColumn(int delta) const;
   // 2D analogue of Activity::handleListTouch() for a grid instead of a 1D list:
   // maps a touch point to a flat book index via cellWidth/cellHeight/gridLeft/
   // gridTop. Untested on hardware -- no C3 target (X3/X4) has touch.

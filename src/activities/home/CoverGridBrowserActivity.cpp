@@ -205,6 +205,46 @@ int CoverGridBrowserActivity::hitTestCell(const int tx, const int ty) const {
   return flatIndex;
 }
 
+int CoverGridBrowserActivity::stepRowDown() const {
+  const int n = static_cast<int>(books.size());
+  if (n == 0 || cols <= 0) {
+    return selectedIndex;
+  }
+  const int col = selectedIndex % cols;
+  const int nextRowStart = (selectedIndex / cols + 1) * cols;
+  const int candidate = nextRowStart + col;
+  return candidate < n ? candidate : col;  // wrap to row 0, same column
+}
+
+int CoverGridBrowserActivity::stepRowUp() const {
+  const int n = static_cast<int>(books.size());
+  if (n == 0 || cols <= 0) {
+    return selectedIndex;
+  }
+  const int col = selectedIndex % cols;
+  const int row = selectedIndex / cols;
+  if (row > 0) {
+    return (row - 1) * cols + col;
+  }
+  // Wrap to the bottom row; if it's short of this column (partial last row),
+  // the row above it is guaranteed full since only the last row can be short.
+  const int lastRow = (n - 1) / cols;
+  const int candidate = lastRow * cols + col;
+  return candidate < n ? candidate : candidate - cols;
+}
+
+int CoverGridBrowserActivity::stepColumn(const int delta) const {
+  const int n = static_cast<int>(books.size());
+  if (n == 0 || cols <= 0) {
+    return selectedIndex;
+  }
+  const int rowStart = (selectedIndex / cols) * cols;
+  const int rowCount = std::min(cols, n - rowStart);
+  const int localCol = selectedIndex - rowStart;
+  const int newLocalCol = (localCol + delta + rowCount) % rowCount;
+  return rowStart + newLocalCol;
+}
+
 void CoverGridBrowserActivity::loop() {
   using Button = MappedInputManager::Button;
 
@@ -222,12 +262,17 @@ void CoverGridBrowserActivity::loop() {
 
   const int totalBooks = static_cast<int>(books.size());
 
-  buttonNavigator.onPress({Button::Down}, [this, totalBooks] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, totalBooks);
+  // Rows: side Up/Down. Single step on release (matching FileBrowserActivity/
+  // RecentBooksActivity's release-edge convention for paginated lists);
+  // continuous hold reuses their exact nextPageIndex/previousPageIndex page-jump
+  // formula unchanged, which lands on jumping a full itemsPerPage -- i.e. the
+  // next/previous page of rows.
+  buttonNavigator.onRelease({Button::Down}, [this] {
+    selectedIndex = stepRowDown();
     requestUpdate();
   });
-  buttonNavigator.onPress({Button::Up}, [this, totalBooks] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, totalBooks);
+  buttonNavigator.onRelease({Button::Up}, [this] {
+    selectedIndex = stepRowUp();
     requestUpdate();
   });
   buttonNavigator.onContinuous({Button::Down}, [this, totalBooks] {
@@ -236,6 +281,18 @@ void CoverGridBrowserActivity::loop() {
   });
   buttonNavigator.onContinuous({Button::Up}, [this, totalBooks] {
     selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, totalBooks, itemsPerPage);
+    requestUpdate();
+  });
+
+  // Columns: front Left/Right move within the current row only. No stock list
+  // activity has a second axis to mirror a long-press convention from, so this
+  // is single-step only.
+  columnNavigator.onRelease({Button::Right}, [this] {
+    selectedIndex = stepColumn(1);
+    requestUpdate();
+  });
+  columnNavigator.onRelease({Button::Left}, [this] {
+    selectedIndex = stepColumn(-1);
     requestUpdate();
   });
 
@@ -368,7 +425,10 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
 
   // Back always returns Home from here (no directory nesting to go up), so the
   // hint reads "Home" -- same semantics as FileBrowserActivity's root-level Back.
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Front Left/Right now move within the row (side Up/Down move by row), so the
+  // hint text is "Left"/"Right", not the "Up"/"Down" stock lists use for the
+  // same physical buttons.
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
