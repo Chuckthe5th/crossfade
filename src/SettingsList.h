@@ -173,9 +173,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "uiTheme", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_HOME_SCREEN_STYLE, &CrossPointSettings::homeScreenStyle,
-                          {StrId::STR_HOME_SCREEN_STOCK, StrId::STR_HOME_SCREEN_GRID}, "homeScreenStyle",
-                          StrId::STR_CAT_DISPLAY),
 
         // --- Reader ---
         // Built-in font-family entry. Replaced per-call with a registry-aware
@@ -253,6 +250,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                             StrId::STR_CAT_SYSTEM),
+        SettingInfo::Enum(StrId::STR_FILE_BROWSER_VIEW, &CrossPointSettings::fileBrowserView,
+                          {StrId::STR_FILE_BROWSER_VIEW_LIST, StrId::STR_FILE_BROWSER_VIEW_COVERS}, "fileBrowserView",
+                          StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,
                             "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,

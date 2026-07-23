@@ -150,8 +150,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // UI Theme
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3 };
 
-  // Home screen style
-  enum HOME_SCREEN_STYLE { HOME_SCREEN_STOCK = 0, HOME_SCREEN_COVER_GRID = 1, HOME_SCREEN_STYLE_COUNT };
+  // File browser view: flat list (stock) or a paginated cover grid
+  enum FILE_BROWSER_VIEW { FILE_BROWSER_LIST = 0, FILE_BROWSER_COVERS = 1, FILE_BROWSER_VIEW_COUNT };
 
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
@@ -242,9 +242,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
   // UI Theme
   uint8_t uiTheme = LYRA;
-  // Home screen style: stock recent-book-plus-menu, or a paginated cover grid.
-  // Defaults to stock so existing users see no change until they opt in.
-  uint8_t homeScreenStyle = HOME_SCREEN_STOCK;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
@@ -259,6 +256,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char dictionaryName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // File browser view: flat list (stock) or a paginated cover grid. Defaults to
+  // list so existing users see no change until they opt in.
+  uint8_t fileBrowserView = FILE_BROWSER_LIST;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)

@@ -19,9 +19,7 @@ bool isBookFile(const std::string_view name) {
          FsHelpers::hasMarkdownExtension(name);
 }
 
-std::string joinPath(const std::string& dir, const std::string& name) {
-  return (dir == "/" ? dir : dir + "/") + name;
-}
+std::string joinPath(const std::string& dir, const std::string& name) { return (dir == "/" ? dir : dir + "/") + name; }
 }  // namespace
 
 std::vector<LibraryScanner::Entry> LibraryScanner::scanAllBooks(const std::string& root, const size_t maxBooks) {

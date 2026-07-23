@@ -1,4 +1,4 @@
-#include "CoverGridHomeActivity.h"
+#include "CoverGridBrowserActivity.h"
 
 #include <Bitmap.h>
 #include <Epub.h>
@@ -10,12 +10,11 @@
 
 #include <algorithm>
 
+#include "../reader/EpubReaderUtils.h"
 #include "MappedInputManager.h"
-#include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "../reader/EpubReaderUtils.h"
 
 namespace {
 // Target cell size grid columns/rows are derived from at runtime -- never a
@@ -41,7 +40,7 @@ std::string filenameWithoutExtension(const std::string& path) {
 }
 }  // namespace
 
-void CoverGridHomeActivity::computeGridGeometry() {
+void CoverGridBrowserActivity::computeGridGeometry() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
@@ -65,9 +64,9 @@ void CoverGridHomeActivity::computeGridGeometry() {
   coverHeight = std::max(20, cellHeight - CARD_PADDING * 2 - titleAreaHeight);
 }
 
-void CoverGridHomeActivity::loadBooks() { books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS); }
+void CoverGridBrowserActivity::loadBooks() { books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS); }
 
-void CoverGridHomeActivity::resolveCell(const std::string& path, GridCell& cell) const {
+void CoverGridBrowserActivity::resolveCell(const std::string& path, GridCell& cell) const {
   cell.title.clear();
   cell.coverThumbPath.clear();
   cell.hasCover = false;
@@ -115,7 +114,7 @@ void CoverGridHomeActivity::resolveCell(const std::string& path, GridCell& cell)
   }
 }
 
-void CoverGridHomeActivity::ensurePageLoaded() {
+void CoverGridBrowserActivity::ensurePageLoaded() {
   if (books.empty() || itemsPerPage <= 0) {
     return;
   }
@@ -143,7 +142,7 @@ void CoverGridHomeActivity::ensurePageLoaded() {
   requestUpdate();
 }
 
-void CoverGridHomeActivity::onEnter() {
+void CoverGridBrowserActivity::onEnter() {
   Activity::onEnter();
 
   computeGridGeometry();
@@ -164,67 +163,17 @@ void CoverGridHomeActivity::onEnter() {
   loadedPageStart = -1;
   pageCells.clear();
   firstRenderDone = false;
-  backPressSeen = false;
 
   requestUpdate();
 }
 
-void CoverGridHomeActivity::onExit() {
+void CoverGridBrowserActivity::onExit() {
   Activity::onExit();
   books.clear();
   pageCells.clear();
 }
 
-void CoverGridHomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
-void CoverGridHomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
-void CoverGridHomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
-void CoverGridHomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
-void CoverGridHomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
-
-void CoverGridHomeActivity::openBackMenu() {
-  backMenuActions.clear();
-  std::vector<std::string> options;
-  options.reserve(5);
-
-  options.emplace_back(tr(STR_BROWSE_FILES));
-  backMenuActions.push_back(MenuAction::FileBrowser);
-  options.emplace_back(tr(STR_MENU_RECENT_BOOKS));
-  backMenuActions.push_back(MenuAction::Recents);
-  if (OPDS_STORE.hasServers()) {
-    options.emplace_back(tr(STR_OPDS_BROWSER));
-    backMenuActions.push_back(MenuAction::OpdsBrowser);
-  }
-  options.emplace_back(tr(STR_FILE_TRANSFER));
-  backMenuActions.push_back(MenuAction::FileTransfer);
-  options.emplace_back(tr(STR_SETTINGS_TITLE));
-  backMenuActions.push_back(MenuAction::Settings);
-
-  backMenu.show(StrId::STR_MENU, options, 0, [this](int index) {
-    if (index < 0 || index >= static_cast<int>(backMenuActions.size())) {
-      return;
-    }
-    switch (backMenuActions[index]) {
-      case MenuAction::FileBrowser:
-        onFileBrowserOpen();
-        break;
-      case MenuAction::Recents:
-        onRecentsOpen();
-        break;
-      case MenuAction::OpdsBrowser:
-        onOpdsBrowserOpen();
-        break;
-      case MenuAction::FileTransfer:
-        onFileTransferOpen();
-        break;
-      case MenuAction::Settings:
-        onSettingsOpen();
-        break;
-    }
-  });
-  requestUpdate();
-}
-
-int CoverGridHomeActivity::hitTestCell(const int tx, const int ty) const {
+int CoverGridBrowserActivity::hitTestCell(const int tx, const int ty) const {
   if (ty < gridTop || tx < gridLeft || cellWidth <= 0 || cellHeight <= 0) {
     return -1;
   }
@@ -241,19 +190,14 @@ int CoverGridHomeActivity::hitTestCell(const int tx, const int ty) const {
   return flatIndex;
 }
 
-void CoverGridHomeActivity::loop() {
-  if (backMenu.isActive()) {
-    backMenu.handleInput(mappedInput, [this] { requestUpdate(); });
-    return;
-  }
-
+void CoverGridBrowserActivity::loop() {
   using Button = MappedInputManager::Button;
 
-  if (mappedInput.wasPressed(Button::Back)) {
-    backPressSeen = true;
-  }
-  if (mappedInput.wasReleased(Button::Back) && backPressSeen) {
-    openBackMenu();
+  // The grid has no directory nesting (it flattens the whole card), so unlike
+  // FileBrowserActivity there's no "go up one level" state -- Back always
+  // returns straight to Home, matching FileBrowserActivity's root-level Back.
+  if (mappedInput.wasReleased(Button::Back)) {
+    onGoHome();
     return;
   }
 
@@ -304,7 +248,7 @@ void CoverGridHomeActivity::loop() {
   }
 }
 
-void CoverGridHomeActivity::drawCell(const int flatIndex, const int x, const int y, const bool selected) const {
+void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const int y, const bool selected) const {
   const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
   const int cellIdx = flatIndex - pageStart;
   const bool haveData = loadedPageStart == pageStart && cellIdx >= 0 && cellIdx < static_cast<int>(pageCells.size());
@@ -320,7 +264,7 @@ void CoverGridHomeActivity::drawCell(const int flatIndex, const int x, const int
     title = cell.title;
     if (cell.hasCover) {
       HalFile file;
-      if (Storage.openFileForRead("CGH", cell.coverThumbPath, file)) {
+      if (Storage.openFileForRead("CGB", cell.coverThumbPath, file)) {
         Bitmap bitmap(file);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           renderer.drawBitmap1Bit(bitmap, innerX, innerY, innerW, coverHeight);
@@ -348,7 +292,7 @@ void CoverGridHomeActivity::drawCell(const int flatIndex, const int x, const int
   }
 }
 
-void CoverGridHomeActivity::render(RenderLock&&) {
+void CoverGridBrowserActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
 
@@ -381,7 +325,7 @@ void CoverGridHomeActivity::render(RenderLock&&) {
   }
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle);
+                 headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle);
 
   if (!books.empty()) {
     const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
@@ -396,10 +340,10 @@ void CoverGridHomeActivity::render(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Back always returns Home from here (no directory nesting to go up), so the
+  // hint reads "Home" -- same semantics as FileBrowserActivity's root-level Back.
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  backMenu.render(renderer);
 
   renderer.displayBuffer();
 
