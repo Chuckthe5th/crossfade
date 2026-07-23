@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
 #include <Xtc.h>
 
 #include <algorithm>
@@ -28,6 +29,9 @@ constexpr int CARD_PADDING = 6;
 // held only while this activity is on screen and freed in onExit(). Typical
 // libraries are far smaller; LibraryScanner logs if the card holds more.
 constexpr size_t MAX_GRID_BOOKS = 2000;
+// Matches ButtonNavigator's own continuous-hold repeat interval -- a familiar
+// "still working" cadence -- rather than refreshing the panel once per cell.
+constexpr uint32_t PROGRESS_UPDATE_INTERVAL_MS = 500;
 
 std::string filenameWithoutExtension(const std::string& path) {
   size_t start = path.find_last_of('/');
@@ -81,14 +85,21 @@ void CoverGridBrowserActivity::computeGridGeometry() {
 
 void CoverGridBrowserActivity::loadBooks() { books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS); }
 
-void CoverGridBrowserActivity::resolveCell(const std::string& path, GridCell& cell) const {
+// PERF INSTRUMENTATION (temporary -- diagnosing slow page turns, not yet wired
+// to any behavior change). Logs at LOG_DBG so it's silent in release builds
+// (LOG_LEVEL=0) and visible on `default` (LOG_LEVEL=2) / serial monitor.
+bool CoverGridBrowserActivity::resolveCell(const std::string& path, GridCell& cell) const {
+  const uint32_t cellStartMs = millis();
   cell.title.clear();
   cell.coverThumbPath.clear();
   cell.hasCover = false;
+  bool generated = false;
 
   if (FsHelpers::hasEpubExtension(path)) {
+    const uint32_t metaStartMs = millis();
     Epub epub(path, "/.crosspoint");
     bool haveMetadata = epub.load(/*buildIfMissing=*/false, /*skipLoadingCss=*/true);
+    const bool wasCachedBook = haveMetadata;
     if (!haveMetadata) {
       // Never opened before: no book.bin yet. A full build (spine + TOC) would be
       // too expensive to pay per book just to populate a grid tile, so fall back
@@ -96,37 +107,63 @@ void CoverGridBrowserActivity::resolveCell(const std::string& path, GridCell& ce
       epub.setupCacheDir();
       haveMetadata = epub.loadMetadataOnly();
     }
+    const uint32_t metaMs = millis() - metaStartMs;
     if (haveMetadata) {
       cell.title = epub.getTitle();
       const std::string thumbPath = epub.getThumbBmpPath(coverHeight);
-      if (!Storage.exists(thumbPath.c_str())) {
+      const bool thumbCached = Storage.exists(thumbPath.c_str());
+      uint32_t genMs = 0;
+      if (!thumbCached) {
+        const uint32_t genStartMs = millis();
         epub.generateThumbBmp(coverHeight);
+        genMs = millis() - genStartMs;
+        generated = true;
       }
       if (Storage.exists(thumbPath.c_str())) {
         cell.coverThumbPath = thumbPath;
         cell.hasCover = true;
       }
+      LOG_DBG("CGB-PERF",
+              "resolveCell EPUB \"%s\": bookBinCached=%d metadataResolveMs=%lu thumbCached=%d "
+              "decodeScaleWriteMs=%lu totalMs=%lu",
+              path.c_str(), wasCachedBook, static_cast<unsigned long>(metaMs), thumbCached,
+              static_cast<unsigned long>(genMs), static_cast<unsigned long>(millis() - cellStartMs));
+    } else {
+      LOG_DBG("CGB-PERF", "resolveCell EPUB \"%s\": metadata FAILED, metadataResolveMs=%lu totalMs=%lu", path.c_str(),
+              static_cast<unsigned long>(metaMs), static_cast<unsigned long>(millis() - cellStartMs));
     }
   } else if (FsHelpers::hasXtcExtension(path)) {
+    const uint32_t loadStartMs = millis();
     Xtc xtc(path, "/.crosspoint");
-    if (xtc.load()) {
+    const bool loaded = xtc.load();
+    const uint32_t loadMs = millis() - loadStartMs;
+    if (loaded) {
       cell.title = xtc.getTitle();
       const std::string thumbPath = xtc.getThumbBmpPath(coverHeight);
-      if (!Storage.exists(thumbPath.c_str())) {
+      const bool thumbCached = Storage.exists(thumbPath.c_str());
+      uint32_t genMs = 0;
+      if (!thumbCached) {
+        const uint32_t genStartMs = millis();
         xtc.setupCacheDir();
         xtc.generateThumbBmp(coverHeight);
+        genMs = millis() - genStartMs;
+        generated = true;
       }
       if (Storage.exists(thumbPath.c_str())) {
         cell.coverThumbPath = thumbPath;
         cell.hasCover = true;
       }
+      LOG_DBG("CGB-PERF", "resolveCell XTC \"%s\": headerLoadMs=%lu thumbCached=%d decodeScaleWriteMs=%lu totalMs=%lu",
+              path.c_str(), static_cast<unsigned long>(loadMs), thumbCached, static_cast<unsigned long>(genMs),
+              static_cast<unsigned long>(millis() - cellStartMs));
     }
   }
-  // TXT/MD have no cover concept -- title-only fallback card below.
+  // TXT/MD have no cover concept -- title-only fallback card below, no file open.
 
   if (cell.title.empty()) {
     cell.title = filenameWithoutExtension(path);
   }
+  return generated;
 }
 
 void CoverGridBrowserActivity::ensurePageLoaded() {
@@ -138,23 +175,43 @@ void CoverGridBrowserActivity::ensurePageLoaded() {
     return;
   }
 
+  const uint32_t pageLoadStartMs = millis();
   const int pageEnd = std::min(static_cast<int>(books.size()), pageStart + itemsPerPage);
   pageCells.assign(pageEnd - pageStart, GridCell{});
 
+  // A loading popup -- and the extra e-ink refreshes it costs -- only appears
+  // when a cell actually needs its thumbnail generated. A page whose covers
+  // are all already cached resolves silently here; the caller's single
+  // end-of-render displayBuffer() is the only refresh that page turn pays.
+  // When generation IS needed, progress updates are throttled to at most one
+  // every PROGRESS_UPDATE_INTERVAL_MS, not one per cell.
   Rect popupRect;
   bool showingLoading = false;
+  uint32_t lastProgressUpdateMs = 0;
   const int count = pageEnd - pageStart;
+  int progressRefreshCount = 0;
   for (int i = pageStart; i < pageEnd; i++) {
+    const bool generated = resolveCell(books[i].path, pageCells[i - pageStart]);
+    if (!generated) {
+      continue;
+    }
+    const uint32_t nowMs = millis();
     if (!showingLoading) {
       showingLoading = true;
       popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+      GUI.fillPopupProgress(renderer, popupRect, 10 + (i - pageStart) * 90 / std::max(1, count));
+      lastProgressUpdateMs = nowMs;
+      progressRefreshCount++;
+    } else if (nowMs - lastProgressUpdateMs >= PROGRESS_UPDATE_INTERVAL_MS) {
+      GUI.fillPopupProgress(renderer, popupRect, 10 + (i - pageStart) * 90 / std::max(1, count));
+      lastProgressUpdateMs = nowMs;
+      progressRefreshCount++;
     }
-    GUI.fillPopupProgress(renderer, popupRect, 10 + (i - pageStart) * 90 / std::max(1, count));
-    resolveCell(books[i].path, pageCells[i - pageStart]);
   }
+  LOG_DBG("CGB-PERF", "ensurePageLoaded page=%d cells=%d progressBarRefreshes=%d totalMs=%lu", pageStart, count,
+          progressRefreshCount, static_cast<unsigned long>(millis() - pageLoadStartMs));
 
   loadedPageStart = pageStart;
-  requestUpdate();
 }
 
 void CoverGridBrowserActivity::onEnter() {
@@ -177,7 +234,6 @@ void CoverGridBrowserActivity::onEnter() {
 
   loadedPageStart = -1;
   pageCells.clear();
-  firstRenderDone = false;
 
   requestUpdate();
 }
@@ -335,10 +391,16 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
     const GridCell& cell = pageCells[cellIdx];
     title = cell.title;
     if (cell.hasCover) {
+      // PERF INSTRUMENTATION (temporary): file open+header parse vs. the
+      // row-streamed decode/scale/draw, split out since drawCell re-reads the
+      // BMP from SD on every render, not just once per cover.
+      const uint32_t openStartMs = millis();
       HalFile file;
       if (Storage.openFileForRead("CGB", cell.coverThumbPath, file)) {
         Bitmap bitmap(file);
-        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+        const bool headerOk = bitmap.parseHeaders() == BmpReaderError::Ok;
+        const uint32_t openMs = millis() - openStartMs;
+        if (headerOk) {
           // Center the cover in its box: drawBitmap1Bit only ever shrinks (never
           // stretches) to fit maxWidth/maxHeight, binding on whichever dimension
           // needs it more, so a cover whose aspect ratio doesn't match the cell's
@@ -348,7 +410,14 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
           const int renderedH = static_cast<int>(bitmap.getHeight() * scale);
           const int coverX = innerX + (innerW - renderedW) / 2;
           const int coverY = innerY + (coverHeight - renderedH) / 2;
+          const uint32_t streamStartMs = millis();
           renderer.drawBitmap1Bit(bitmap, coverX, coverY, innerW, coverHeight);
+          LOG_DBG("CGB-PERF",
+                  "drawCell \"%s\": openHeaderMs=%lu cachedPx=%dx%d cellBoxPx=%dx%d rescaled=%d "
+                  "streamDrawMs=%lu",
+                  cell.coverThumbPath.c_str(), static_cast<unsigned long>(openMs), bitmap.getWidth(),
+                  bitmap.getHeight(), innerW, coverHeight, scale < 1.0f,
+                  static_cast<unsigned long>(millis() - streamStartMs));
           drewCover = true;
         }
       }
@@ -376,6 +445,16 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
 }
 
 void CoverGridBrowserActivity::render(RenderLock&&) {
+  // Resolve the current page's metadata/covers BEFORE drawing anything, so the
+  // grid is composed once and shown once -- no placeholder pass while
+  // ensurePageLoaded runs behind it. If the page is already resolved (the
+  // common case: same page, or a different page whose covers are all already
+  // cached), this is a fast, silent no-op with no popup and no extra refresh.
+  ensurePageLoaded();
+
+  // PERF INSTRUMENTATION (temporary): wall time for one full render pass,
+  // cell-draw work through the displayBuffer() call it ends with (1 refresh).
+  const uint32_t renderStartMs = millis();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
 
@@ -431,12 +510,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
+  LOG_DBG("CGB-PERF", "render page cells drawn in %lums, about to displayBuffer (1 refresh)",
+          static_cast<unsigned long>(millis() - renderStartMs));
   renderer.displayBuffer();
-
-  if (!firstRenderDone) {
-    firstRenderDone = true;
-    requestUpdate();
-  } else {
-    ensurePageLoaded();
-  }
 }

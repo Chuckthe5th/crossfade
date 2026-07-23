@@ -27,7 +27,6 @@ class CoverGridBrowserActivity final : public Activity {
 
   std::vector<LibraryScanner::Entry> books;
   int selectedIndex = 0;
-  bool firstRenderDone = false;
 
   // Grid geometry, recomputed every onEnter() from the live runtime display
   // size/orientation -- never cached across activity instances, never hardcoded,
@@ -48,8 +47,14 @@ class CoverGridBrowserActivity final : public Activity {
 
   void computeGridGeometry();
   void loadBooks();
+  // Resolves the current page's metadata/covers synchronously (called at the
+  // top of render(), before anything is drawn). Returns via resolveCell whether
+  // each cell needed its thumbnail generated, so a loading popup only appears
+  // -- and only refreshes the panel -- when generation is actually happening;
+  // an already-cached page resolves silently and costs zero extra refreshes.
   void ensurePageLoaded();
-  void resolveCell(const std::string& path, GridCell& cell) const;
+  // Returns true if this cell's thumbnail had to be generated (cache miss).
+  bool resolveCell(const std::string& path, GridCell& cell) const;
   void drawCell(int flatIndex, int x, int y, bool selected) const;
   // Row/column stepping over the flattened book list, treated as a grid of
   // `cols` columns where only the last row may be short. Both row steps wrap
