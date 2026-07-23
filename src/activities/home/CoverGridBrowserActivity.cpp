@@ -81,6 +81,7 @@ void CoverGridBrowserActivity::computeGridGeometry() {
 
   const int titleAreaHeight = renderer.getLineHeight(SMALL_FONT_ID) + CARD_PADDING;
   coverHeight = std::max(20, cellHeight - CARD_PADDING * 2 - titleAreaHeight);
+  coverWidth = cellWidth - CARD_PADDING * 2;
 }
 
 void CoverGridBrowserActivity::loadBooks() { books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS); }
@@ -110,12 +111,12 @@ bool CoverGridBrowserActivity::resolveCell(const std::string& path, GridCell& ce
     const uint32_t metaMs = millis() - metaStartMs;
     if (haveMetadata) {
       cell.title = epub.getTitle();
-      const std::string thumbPath = epub.getThumbBmpPath(coverHeight);
+      const std::string thumbPath = epub.getThumbBmpPath(coverWidth, coverHeight);
       const bool thumbCached = Storage.exists(thumbPath.c_str());
       uint32_t genMs = 0;
       if (!thumbCached) {
         const uint32_t genStartMs = millis();
-        epub.generateThumbBmp(coverHeight);
+        epub.generateThumbBmp(coverWidth, coverHeight);
         genMs = millis() - genStartMs;
         generated = true;
       }
@@ -139,13 +140,13 @@ bool CoverGridBrowserActivity::resolveCell(const std::string& path, GridCell& ce
     const uint32_t loadMs = millis() - loadStartMs;
     if (loaded) {
       cell.title = xtc.getTitle();
-      const std::string thumbPath = xtc.getThumbBmpPath(coverHeight);
+      const std::string thumbPath = xtc.getThumbBmpPath(coverWidth, coverHeight);
       const bool thumbCached = Storage.exists(thumbPath.c_str());
       uint32_t genMs = 0;
       if (!thumbCached) {
         const uint32_t genStartMs = millis();
         xtc.setupCacheDir();
-        xtc.generateThumbBmp(coverHeight);
+        xtc.generateThumbBmp(coverWidth, coverHeight);
         genMs = millis() - genStartMs;
         generated = true;
       }
@@ -385,7 +386,10 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
 
   const int innerX = x + CARD_PADDING;
   const int innerY = y + CARD_PADDING;
-  const int innerW = cellWidth - CARD_PADDING * 2;
+  // Same value resolveCell() generated the cached thumbnail at (coverWidth is
+  // computed once in computeGridGeometry() as cellWidth - CARD_PADDING * 2),
+  // so a cache hit needs no rescale in drawBitmap1Bit below.
+  const int innerW = coverWidth;
 
   bool drewCover = false;
   std::string title;

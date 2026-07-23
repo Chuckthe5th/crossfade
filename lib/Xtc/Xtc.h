@@ -26,6 +26,11 @@ class Xtc {
   std::unique_ptr<xtc::XtcParser> parser;
   bool loaded;
 
+  // Shared by both generateThumbBmp() overloads: scales the cover page and
+  // writes it to outputPath at (targetWidth, targetHeight), cover-cropped or
+  // letterbox-contained per `crop`.
+  bool generateThumbBmpAtSize(const std::string& outputPath, int targetWidth, int targetHeight, bool crop) const;
+
  public:
   explicit Xtc(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)), loaded(false) {
     // Create cache key based on filepath (same as Epub)
@@ -65,8 +70,16 @@ class Xtc {
   bool generateCoverBmp() const;
   // Thumbnail support (for Continue Reading card)
   std::string getThumbBmpPath() const;
+  // Continue Reading card: fixed 0.6:1 width:height, cover-crop scaled.
   std::string getThumbBmpPath(int height) const;
+  // Exact-size thumbnail (e.g. a grid cell): both dimensions explicit, so the
+  // cache filename changes whenever the target box does.
+  std::string getThumbBmpPath(int width, int height) const;
+  // Cover-crop scaled to (height*0.6, height); may overflow the nominal width.
   bool generateThumbBmp(int height) const;
+  // Letterbox-contained to exactly (width, height): neither output dimension
+  // ever exceeds the target. Intended for grid cells, which center at draw time.
+  bool generateThumbBmp(int width, int height) const;
 
   // Page access
   uint32_t getPageCount() const;

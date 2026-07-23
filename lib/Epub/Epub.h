@@ -36,6 +36,11 @@ class Epub {
   bool parseTocNavFile() const;
   void discoverCssFilesFromZip();
   void parseCssFiles() const;
+  // Shared by both generateThumbBmp() overloads: decodes the cover image and
+  // writes it to outputPath at (targetWidth, targetHeight), cover-cropped or
+  // letterbox-contained per `crop`. Writes an empty placeholder on failure so
+  // generation isn't retried every call.
+  bool generateThumbBmpAtSize(const std::string& outputPath, int targetWidth, int targetHeight, bool crop) const;
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
@@ -60,8 +65,21 @@ class Epub {
   std::string getCoverBmpPath(bool cropped = false) const;
   bool generateCoverBmp(bool cropped = false) const;
   std::string getThumbBmpPath() const;
+  // Continue Reading card thumbnail: height-only, 0.6:1 width:height assumption,
+  // cover-crop scaled (may overflow the nominal width -- see generateThumbBmp(int)).
   std::string getThumbBmpPath(int height) const;
+  // Exact-size thumbnail (e.g. a grid cell): both dimensions explicit, so the
+  // cache filename changes whenever the target box does -- a stale entry from a
+  // different box size is simply never looked up, not misrendered.
+  std::string getThumbBmpPath(int width, int height) const;
+  // Cover-crop scaled to (height*0.6, height); may overflow the nominal width
+  // to fill both dimensions (see JpegToBmpConverter's crop=true doc). Intended
+  // for the Continue Reading card, which crops at draw time.
   bool generateThumbBmp(int height) const;
+  // Letterbox-contained to exactly (width, height): neither output dimension
+  // ever exceeds the target, so a caller drawing at that exact box size needs
+  // no further scaling. Intended for grid cells, which center instead of crop.
+  bool generateThumbBmp(int width, int height) const;
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize,

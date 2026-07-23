@@ -43,6 +43,10 @@ class CoverGridBrowserActivity final : public Activity {
   int itemsPerPage = 0;
   int cellWidth = 0;
   int cellHeight = 0;
+  // Exact pixel box thumbnails are generated at and drawn into -- coverWidth
+  // matches drawCell's innerW exactly, so the cache is generated at the same
+  // size it's streamed at and drawBitmap1Bit never has to rescale.
+  int coverWidth = 0;
   int coverHeight = 0;
   int gridLeft = 0;
   int gridTop = 0;
