@@ -27,6 +27,13 @@ class CoverGridBrowserActivity final : public Activity {
 
   std::vector<LibraryScanner::Entry> books;
   int selectedIndex = 0;
+  // Flat index highlighted in the framebuffer as of the last completed render,
+  // and whether a full page has ever been composed. EINK_DISPLAY_SINGLE_BUFFER_MODE
+  // means the framebuffer persists between renders, so a same-page selection
+  // move only needs to erase the old highlight and draw the new one -- see the
+  // fast path at the top of render().
+  int lastRenderedIndex = -1;
+  bool hasComposedPage = false;
 
   // Grid geometry, recomputed every onEnter() from the live runtime display
   // size/orientation -- never cached across activity instances, never hardcoded,
@@ -56,6 +63,13 @@ class CoverGridBrowserActivity final : public Activity {
   // Returns true if this cell's thumbnail had to be generated (cache miss).
   bool resolveCell(const std::string& path, GridCell& cell) const;
   void drawCell(int flatIndex, int x, int y, bool selected) const;
+  // Top-left origin (in screen coordinates) of flatIndex's cell within the page
+  // starting at pageStart. Shared by the full-grid compose and the
+  // selection-only fast path so both draw from the same geometry.
+  void cellOrigin(int flatIndex, int pageStart, int& outX, int& outY) const;
+  // Header title + page-position subtitle for the given book. Shared by the
+  // full-grid compose and the selection-only fast path.
+  void computeHeaderText(int flatIndex, int pageStart, std::string& outTitle, std::string& outSubtitle) const;
   // Row/column stepping over the flattened book list, treated as a grid of
   // `cols` columns where only the last row may be short. Both row steps wrap
   // (bottom row wraps to row 0 same column and vice versa); column steps wrap

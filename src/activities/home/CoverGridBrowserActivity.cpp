@@ -234,6 +234,8 @@ void CoverGridBrowserActivity::onEnter() {
 
   loadedPageStart = -1;
   pageCells.clear();
+  lastRenderedIndex = -1;
+  hasComposedPage = false;
 
   requestUpdate();
 }
@@ -444,53 +446,94 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   }
 }
 
+void CoverGridBrowserActivity::cellOrigin(const int flatIndex, const int pageStart, int& outX, int& outY) const {
+  const int localIdx = flatIndex - pageStart;
+  outX = gridLeft + (localIdx % cols) * cellWidth;
+  outY = gridTop + (localIdx / cols) * cellHeight;
+}
+
+void CoverGridBrowserActivity::computeHeaderText(const int flatIndex, const int pageStart, std::string& outTitle,
+                                                 std::string& outSubtitle) const {
+  outTitle.clear();
+  outSubtitle.clear();
+  const int cellIdx = flatIndex - pageStart;
+  if (loadedPageStart == pageStart && cellIdx >= 0 && cellIdx < static_cast<int>(pageCells.size())) {
+    outTitle = pageCells[cellIdx].title;
+  }
+
+  const std::string& path = books[flatIndex].path;
+  if (FsHelpers::hasEpubExtension(path)) {
+    const Epub epub(path, "/.crosspoint");
+    int spineIndex = 0;
+    int pageNumber = 0;
+    int pageCount = 0;
+    if (EpubReaderUtils::loadProgress(epub.getCachePath(), spineIndex, pageNumber, pageCount) && pageCount > 0) {
+      outSubtitle = std::to_string(pageNumber + 1) + "/" + std::to_string(pageCount);
+    }
+  }
+}
+
 void CoverGridBrowserActivity::render(RenderLock&&) {
+  // Captured before ensurePageLoaded() runs (which updates loadedPageStart on a
+  // page transition): true only when the page the new selection lands on is
+  // the same one already composed in the framebuffer.
+  const int pageStart = books.empty() ? -1 : (selectedIndex / itemsPerPage) * itemsPerPage;
+  const bool sameComposedPage = hasComposedPage && !books.empty() && pageStart == loadedPageStart;
+
   // Resolve the current page's metadata/covers BEFORE drawing anything, so the
   // grid is composed once and shown once -- no placeholder pass while
-  // ensurePageLoaded runs behind it. If the page is already resolved (the
-  // common case: same page, or a different page whose covers are all already
-  // cached), this is a fast, silent no-op with no popup and no extra refresh.
+  // ensurePageLoaded runs behind it. A no-op when the page is already resolved.
   ensurePageLoaded();
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+
+  // Fast path: selection moved within the page already on screen.
+  // EINK_DISPLAY_SINGLE_BUFFER_MODE means the framebuffer already holds the
+  // rest of the page, so only the cell that lost the highlight and the one
+  // that gained it need redrawing (each touches SD only if it has a cover --
+  // at most 2 files, not the whole page) plus the header, then one refresh.
+  // No clearScreen, no full grid redraw.
+  if (sameComposedPage && lastRenderedIndex != selectedIndex) {
+    if (lastRenderedIndex >= pageStart && lastRenderedIndex < pageStart + itemsPerPage &&
+        lastRenderedIndex < static_cast<int>(books.size())) {
+      int oldX, oldY;
+      cellOrigin(lastRenderedIndex, pageStart, oldX, oldY);
+      drawCell(lastRenderedIndex, oldX, oldY, false);
+    }
+    int newX, newY;
+    cellOrigin(selectedIndex, pageStart, newX, newY);
+    drawCell(selectedIndex, newX, newY, true);
+
+    std::string headerTitle;
+    std::string subtitle;
+    computeHeaderText(selectedIndex, pageStart, headerTitle, subtitle);
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                   headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle.empty() ? nullptr : subtitle.c_str());
+
+    renderer.displayBuffer();
+    lastRenderedIndex = selectedIndex;
+    return;
+  }
 
   // PERF INSTRUMENTATION (temporary): wall time for one full render pass,
   // cell-draw work through the displayBuffer() call it ends with (1 refresh).
   const uint32_t renderStartMs = millis();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
 
   renderer.clearScreen();
 
   std::string headerTitle;
-  char subtitleBuf[32] = "";
-  const char* subtitle = nullptr;
-
+  std::string subtitle;
   if (books.empty()) {
     headerTitle = tr(STR_NO_BOOKS_FOUND);
   } else {
-    const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
-    const int cellIdx = selectedIndex - pageStart;
-    if (loadedPageStart == pageStart && cellIdx < static_cast<int>(pageCells.size())) {
-      headerTitle = pageCells[cellIdx].title;
-    }
-
-    const std::string& selectedPath = books[selectedIndex].path;
-    if (FsHelpers::hasEpubExtension(selectedPath)) {
-      const Epub epub(selectedPath, "/.crosspoint");
-      int spineIndex = 0;
-      int pageNumber = 0;
-      int pageCount = 0;
-      if (EpubReaderUtils::loadProgress(epub.getCachePath(), spineIndex, pageNumber, pageCount) && pageCount > 0) {
-        snprintf(subtitleBuf, sizeof(subtitleBuf), "%d/%d", pageNumber + 1, pageCount);
-        subtitle = subtitleBuf;
-      }
-    }
+    computeHeaderText(selectedIndex, pageStart, headerTitle, subtitle);
   }
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle);
+                 headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle.empty() ? nullptr : subtitle.c_str());
 
   if (!books.empty()) {
-    const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
         const int flatIndex = pageStart + r * cols + c;
@@ -513,4 +556,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   LOG_DBG("CGB-PERF", "render page cells drawn in %lums, about to displayBuffer (1 refresh)",
           static_cast<unsigned long>(millis() - renderStartMs));
   renderer.displayBuffer();
+
+  hasComposedPage = true;
+  lastRenderedIndex = selectedIndex;
 }
