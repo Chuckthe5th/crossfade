@@ -351,9 +351,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Unlocked for the same reason as statusBarSpec(); see the note above.
   ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight) const;
 
-  static const char* getFilePath() { return "/.crosspoint/settings.json"; }
+  // This fork's own settings file -- deliberately not settings.json, which upstream CrossPoint
+  // also uses. Sharing that file meant flashing between this fork and upstream reset settings in
+  // both directions (each firmware overwrites fields the other doesn't know about). See
+  // migrateLegacySettingsFile() for the one-time seed from an existing settings.json.
+  static const char* getFilePath() { return "/.crosspoint/crossfade-settings.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
+
+  // One-time migration: if this fork's own settings file doesn't exist yet but a legacy shared
+  // settings.json does, copies it once as the seed so switching to this fork doesn't silently
+  // reset every setting. The legacy file itself is never modified, written to, or removed --
+  // flashing back to upstream still finds its settings exactly as it left them. A no-op once
+  // getFilePath() exists (whether from a prior seed or a save under this fork), so this is safe
+  // to call unconditionally on every boot. Must run before the first loadFromFile() call.
+  static void migrateLegacySettingsFile();
 
   static void validateFrontButtonMapping(CrossPointSettings& settings);
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);

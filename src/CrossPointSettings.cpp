@@ -1,5 +1,6 @@
 #include "CrossPointSettings.h"
 
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
@@ -25,6 +26,20 @@ void copyToField(char* dest, const char* src, const size_t maxLen) {
 }
 
 }  // namespace
+
+void CrossPointSettings::migrateLegacySettingsFile() {
+  if (Storage.exists(getFilePath())) {
+    return;  // Already seeded, or already saved fresh under this fork -- never overwrite.
+  }
+  constexpr const char* legacyPath = "/.crosspoint/settings.json";
+  JsonDocument doc;
+  if (!readDocFromFile(legacyPath, doc)) {
+    return;  // No legacy file -- a normal fresh install, nothing to seed from.
+  }
+  if (!writeDocToFile(getFilePath(), doc)) {
+    LOG_ERR("SETTINGS", "Failed to seed %s from %s", getFilePath(), legacyPath);
+  }
+}
 
 void CrossPointSettings::validateFrontButtonMapping(CrossPointSettings& settings) {
   const uint8_t mapping[] = {settings.frontButtonBack, settings.frontButtonConfirm, settings.frontButtonLeft,

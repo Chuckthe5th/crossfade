@@ -303,6 +303,7 @@ void setup() {
 
   HalSystem::checkPanic();
 
+  CrossPointSettings::migrateLegacySettingsFile();
   SETTINGS.loadFromFile();
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
