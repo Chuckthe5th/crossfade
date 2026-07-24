@@ -54,7 +54,12 @@ std::string LibraryListActivity::rowTitle(const int index) const {
   if (index < 0 || index >= static_cast<int>(entries.size())) {
     return "";
   }
-  return entries[index].title;
+  const auto& entry = entries[index];
+  // Text is the only row element every theme actually renders (see the icon lambda below --
+  // RoundedRaffTheme discards rowIcon entirely and BaseTheme never draws it, so a series row
+  // signalled only by icon is invisible on half the themes). A title suffix works identically
+  // everywhere, so it's the row's sole "this is a series" signal.
+  return entry.isSeries ? entry.title + tr(STR_SERIES_SUFFIX) : entry.title;
 }
 
 std::string LibraryListActivity::rowAuthor(const int index) const {
