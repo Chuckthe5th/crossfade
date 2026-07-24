@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <iterator>
 
-#include "CrossPointSettings.h"
 #include "util/BookMetadataResolver.h"
 
 void LibraryIndexBuilder::begin() {
@@ -101,16 +100,4 @@ void LibraryIndexBuilder::cancel() {
   nextPendingIndex = 0;
   dirty = false;
   // The on-disk index (if any) is never touched here -- only commit() writes.
-}
-
-void checkLibraryIndexStaleness() {
-  if (!SETTINGS.groupBySeries) {
-    return;
-  }
-  LibraryIndexBuilder builder(LibraryIndex::PATH);
-  builder.begin();
-  if (!builder.upToDate()) {
-    LOG_INF("LIBIDX", "Library index is stale (%d book(s) need updating); resolves on next Browse Books entry",
-            builder.totalCount());
-  }
 }
