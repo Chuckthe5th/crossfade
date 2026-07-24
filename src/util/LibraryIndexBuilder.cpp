@@ -16,7 +16,7 @@ void LibraryIndexBuilder::begin() {
   startMs = millis();
 
   const auto scanned = LibraryScanner::scanAllBooks("/", LibraryScanner::MAX_LIBRARY_BOOKS,
-                                                     /*collectFingerprint=*/true);
+                                                    /*collectFingerprint=*/true);
 
   LibraryIndex::Index oldIndex;
   const bool hadOldIndex = LibraryIndex::load(indexPath, oldIndex);

@@ -74,7 +74,12 @@ void LibraryIndexRebuildActivity::loop() {
   }
 
   if (state == BUILDING) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    // isPressed(), not wasPressed(): builder.step() blocks for hundreds of ms per book, so
+    // gpio.update() (the only thing that samples the raw button state) only runs about once per
+    // step() -- a quick tap-and-release can land entirely inside that gap and never register as
+    // an edge. A held press is still caught because isPressed() reflects whatever the debounced
+    // state was at the last sample, not a one-shot event that resets before the next check.
+    if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
       builder.cancel();
       state = CANCELLED;
       requestUpdate();
@@ -111,9 +116,13 @@ void LibraryIndexRebuildActivity::render(RenderLock&&) {
     if (!popupShown) {
       renderer.clearScreen();
       GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                    tr(STR_REBUILD_LIBRARY_INDEX));
+                     tr(STR_REBUILD_LIBRARY_INDEX));
       popupRect = GUI.drawPopup(renderer, tr(STR_BUILDING_LIBRARY_INDEX));
       popupShown = true;
+      // Drawn once here, not per progress tick -- matches the header above, and the hint text
+      // itself never changes. isPressed() (see loop()) needs a genuine hold, not a tap.
+      const auto labels = mappedInput.mapLabels(tr(STR_HOLD_TO_CANCEL), "", "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       // This first render happens before builder.begin() has run (see beginBuild()), so
       // totalCount()/resolvedCount() aren't meaningful yet -- skip the progress bar rather than
       // show a misleading 100% for one frame. The next render (after begin() completes) draws it.
