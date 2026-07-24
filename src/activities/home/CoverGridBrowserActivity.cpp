@@ -90,6 +90,11 @@ void CoverGridBrowserActivity::loadBooks() {
     return;
   }
   books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS);
+  // Same filename sort LibraryListActivity's Titles list applies -- both are views over the same
+  // scanAllBooks() result, so toggling fileBrowserView presents the same library in the same order
+  // instead of reshuffling it. Metadata-free (filenames are already known), so this costs nothing;
+  // the per-cell thumbnail cache is keyed by path/size, not position, so reordering doesn't touch it.
+  LibraryScanner::sortByFilename(books);
 }
 
 // Thin wrapper over the shared resolver (also used by LibraryListActivity for the text-only List

@@ -20,6 +20,11 @@ bool isBookFile(const std::string_view name) {
 }
 
 std::string joinPath(const std::string& dir, const std::string& name) { return (dir == "/" ? dir : dir + "/") + name; }
+
+std::string basename(const std::string& path) {
+  const size_t pos = path.find_last_of('/');
+  return pos == std::string::npos ? path : path.substr(pos + 1);
+}
 }  // namespace
 
 std::vector<LibraryScanner::Entry> LibraryScanner::scanAllBooks(const std::string& root, const size_t maxBooks) {
@@ -90,4 +95,9 @@ std::vector<LibraryScanner::Entry> LibraryScanner::scanAllBooks(const std::strin
   }
 
   return result;
+}
+
+void LibraryScanner::sortByFilename(std::vector<Entry>& entries) {
+  std::sort(entries.begin(), entries.end(),
+            [](const Entry& a, const Entry& b) { return FsHelpers::naturalLess(basename(a.path), basename(b.path)); });
 }

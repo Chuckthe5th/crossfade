@@ -18,22 +18,13 @@ namespace {
 // Same cap and reasoning as CoverGridBrowserActivity::MAX_GRID_BOOKS: bounds the recursive SD-card
 // walk's transient RAM (~80 bytes/path worst case), held only while this activity is on screen.
 constexpr size_t MAX_LIST_BOOKS = 2000;
-
-std::string basename(const std::string& path) {
-  const size_t pos = path.find_last_of('/');
-  return pos == std::string::npos ? path : path.substr(pos + 1);
-}
 }  // namespace
 
 void LibraryListActivity::loadBooks() {
   books = LibraryScanner::scanAllBooks("/", MAX_LIST_BOOKS);
-  // A title list is browsed alphabetically, unlike the grid's directory tree-walk order -- sort by
-  // filename (free: no metadata parse needed) rather than by title, which would force resolving
-  // every entry's metadata before the first paint. Filename order approximates title order closely
-  // for most libraries.
-  std::sort(books.begin(), books.end(), [](const LibraryScanner::Entry& a, const LibraryScanner::Entry& b) {
-    return FsHelpers::naturalLess(basename(a.path), basename(b.path));
-  });
+  // Same filename sort CoverGridBrowserActivity's Covers grid applies to its Library source -- both
+  // are views over the same scanAllBooks() result, so they present the same order.
+  LibraryScanner::sortByFilename(books);
 }
 
 void LibraryListActivity::ensurePageLoaded(const int itemsPerPage) {

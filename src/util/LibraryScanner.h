@@ -22,4 +22,12 @@ struct Entry {
 // capped scan is never silently mistaken for full coverage.
 std::vector<Entry> scanAllBooks(const std::string& root, size_t maxBooks);
 
+// Re-sorts a scanAllBooks() result by filename (FsHelpers::naturalLess, numeric-aware and
+// case-insensitive) instead of the scan's directory tree-walk order. Metadata-free -- filenames are
+// already known, so this costs nothing beyond the comparisons themselves -- unlike sorting by title,
+// which would require resolving every entry's metadata first. Used by both flattened-library views
+// (CoverGridBrowserActivity's Covers grid and LibraryListActivity's Titles list) so toggling between
+// them presents the same library in the same order.
+void sortByFilename(std::vector<Entry>& entries);
+
 }  // namespace LibraryScanner
