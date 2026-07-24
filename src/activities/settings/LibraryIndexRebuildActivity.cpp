@@ -53,24 +53,29 @@ void LibraryIndexRebuildActivity::finishOrContinue() {
 }
 
 void LibraryIndexRebuildActivity::beginBuild() {
-  state = BUILDING;
-  popupShown = false;
-  lastPopupUpdateMs = 0;
-  lastPopupPercent = -1;
-  requestUpdateAndWait();  // Show "Building..." before the (fast, but not instant) delta scan below.
-
+  // The delta scan itself (LibraryScanner's directory walk + a fingerprint compare, no OPF/XTC
+  // parsing) runs before any popup: it's cheap enough that showing "Building..." unconditionally
+  // first -- as this used to do -- meant every single auto-triggered entry into a grouped
+  // Covers/Titles view flashed the popup even when nothing had changed and zero parsing was about
+  // to happen. Only show it once begin() has actually found real work.
   builder.begin();
   if (builder.upToDate()) {
-    // Up to date costs nothing to detect (see LibraryIndexBuilder::begin()'s comment) -- auto
-    // mode continues immediately rather than showing a screen for the common case where there
-    // was never anything to wait for. Manual mode still shows it: the user explicitly asked to
-    // rebuild and deserves to know nothing needed to happen.
+    // Up to date costs nothing to detect -- auto mode continues immediately rather than showing a
+    // screen for the common case where there was never anything to wait for. Manual mode still
+    // shows it: the user explicitly asked to rebuild and deserves to know nothing needed to happen.
     if (isAutoMode()) {
       finishOrContinue();
       return;
     }
     state = UP_TO_DATE;
+    requestUpdate();
+    return;
   }
+
+  state = BUILDING;
+  popupShown = false;
+  lastPopupUpdateMs = 0;
+  lastPopupPercent = -1;
   requestUpdate();
 }
 
@@ -159,9 +164,11 @@ void LibraryIndexRebuildActivity::render(RenderLock&&) {
       // itself never changes. isPressed() (see loop()) needs a genuine hold, not a tap.
       const auto labels = mappedInput.mapLabels(tr(STR_HOLD_TO_CANCEL), "", "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      // This first render happens before builder.begin() has run (see beginBuild()), so
-      // totalCount()/resolvedCount() aren't meaningful yet -- skip the progress bar rather than
-      // show a misleading 100% for one frame. The next render (after begin() completes) draws it.
+      // Skip the progress bar on this first frame purely to keep the popup's own first paint to a
+      // single small draw call (fillPopupProgress redraws a sub-rect of what drawPopup just drew,
+      // so combining them here would just repaint the same pixels twice for no visible benefit).
+      // The next render draws it -- builder.begin() has already run by this point (see
+      // beginBuild()), so totalCount()/resolvedCount() are meaningful from the very first tick.
       return;
     }
     const int total = builder.totalCount();
