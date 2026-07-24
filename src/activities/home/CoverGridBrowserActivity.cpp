@@ -595,6 +595,11 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
                                             tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
+  if (!entries.empty()) {
+    const int totalPages = (static_cast<int>(entries.size()) + itemsPerPage - 1) / itemsPerPage;
+    UITheme::drawPageIndicator(renderer, metrics.buttonHintsHeight, pageStart / itemsPerPage + 1, totalPages);
+  }
+
   renderer.displayBuffer();
 
   hasComposedPage = true;

@@ -37,6 +37,15 @@ class UITheme {
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();
   static int getProgressBarHeight();
+  // "<currentPage>/<totalPages>" overlay in the content area's bottom-right corner, with a white
+  // halo so it reads against whatever's already drawn there -- an overlay, not reserved layout
+  // space, so callers never need to account for it in their own geometry/cache-key math.
+  // currentPage is 1-based. No-op when totalPages <= 1 (nothing to indicate). Draws directly via
+  // the renderer rather than through a theme virtual, so it renders identically regardless of the
+  // active theme (unlike list row icons -- see LibraryListActivity's series indicator). Callers
+  // draw this within their own render pass, before their single displayBuffer() call; it never
+  // triggers a refresh itself.
+  static void drawPageIndicator(const GfxRenderer& renderer, int bottomInset, int currentPage, int totalPages);
 
  private:
   const ThemeMetrics* currentMetrics;

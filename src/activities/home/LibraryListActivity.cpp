@@ -286,5 +286,10 @@ void LibraryListActivity::render(RenderLock&&) {
                                             tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
+  if (!entries.empty()) {
+    const int totalPages = (static_cast<int>(entries.size()) + itemsPerPage - 1) / itemsPerPage;
+    UITheme::drawPageIndicator(renderer, metrics.buttonHintsHeight, selectedIndex / itemsPerPage + 1, totalPages);
+  }
+
   renderer.displayBuffer();
 }
