@@ -7,11 +7,23 @@
 #include "util/ButtonNavigator.h"
 #include "util/LibraryScanner.h"
 
-// Alternative to FileBrowserActivity: a paginated grid of cover thumbnails for
-// every book on the SD card, selected via SETTINGS.fileBrowserView (default is
-// the stock FileBrowserActivity; this is strictly opt-in). Reached only from
-// HomeActivity::onFileBrowserOpen() -- see ActivityManager::goToCoverGridBrowser().
+// Alternative to FileBrowserActivity AND RecentBooksActivity: a paginated grid
+// of cover thumbnails, either the whole SD card (SETTINGS.fileBrowserView) or
+// the recent-books list (SETTINGS.recentBooksView); both default to the stock
+// list activity, this is strictly opt-in. Reached from HomeActivity::
+// onFileBrowserOpen()/onRecentsOpen() -- see ActivityManager::
+// goToCoverGridBrowser()/goToCoverGridRecentBooks(). Everything below is
+// source-agnostic except loadBooks() (where the list comes from), the initial
+// selection in onEnter() (last-read search vs. index 0 -- redundant for
+// RecentBooks, which is already MRU-ordered), and the empty-state message.
 class CoverGridBrowserActivity final : public Activity {
+ public:
+  // Mirrors FileBrowserActivity::Mode's role in the same directory: one
+  // activity, a small enum picking where its data comes from, instead of a
+  // second near-duplicate class.
+  enum class Source { Library, RecentBooks };
+
+ private:
   struct GridCell {
     std::string title;
     std::string coverThumbPath;  // empty if this book has no usable cover
@@ -25,6 +37,7 @@ class CoverGridBrowserActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   ButtonNavigator columnNavigator;
 
+  const Source source;
   std::vector<LibraryScanner::Entry> books;
   int selectedIndex = 0;
   // Flat index highlighted in the framebuffer as of the last completed render,
@@ -57,6 +70,9 @@ class CoverGridBrowserActivity final : public Activity {
   int loadedPageStart = -1;
 
   void computeGridGeometry();
+  // Source::Library scans the whole SD card; Source::RecentBooks copies
+  // RECENT_BOOKS.getBooks() as-is (already MRU-ordered, already capped) --
+  // no sort, no scan. The only method that branches on `source`.
   void loadBooks();
   // Resolves the current page's metadata/covers synchronously (called at the
   // top of render(), before anything is drawn). Returns via resolveCell whether
@@ -87,8 +103,10 @@ class CoverGridBrowserActivity final : public Activity {
   int hitTestCell(int tx, int ty) const;
 
  public:
-  explicit CoverGridBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("CoverGridBrowser", renderer, mappedInput) {}
+  explicit CoverGridBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                    Source source = Source::Library)
+      : Activity(source == Source::RecentBooks ? "CoverGridRecentBooks" : "CoverGridBrowser", renderer, mappedInput),
+        source(source) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

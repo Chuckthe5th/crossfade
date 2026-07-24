@@ -84,7 +84,23 @@ void CoverGridBrowserActivity::computeGridGeometry() {
   coverWidth = cellWidth - CARD_PADDING * 2;
 }
 
-void CoverGridBrowserActivity::loadBooks() { books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS); }
+void CoverGridBrowserActivity::loadBooks() {
+  if (source == Source::RecentBooks) {
+    // Mirrors RecentBooksActivity::onEnter(): prune entries whose backing
+    // files are gone before displaying the list.
+    if (RECENT_BOOKS.pruneMissing()) {
+      RECENT_BOOKS.saveToFile();
+    }
+    const auto& recentBooks = RECENT_BOOKS.getBooks();
+    books.clear();
+    books.reserve(recentBooks.size());
+    for (const auto& book : recentBooks) {
+      books.push_back(LibraryScanner::Entry{book.path});
+    }
+    return;
+  }
+  books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS);
+}
 
 // PERF INSTRUMENTATION (temporary -- diagnosing slow page turns, not yet wired
 // to any behavior change). Logs at LOG_DBG so it's silent in release builds
@@ -221,8 +237,13 @@ void CoverGridBrowserActivity::onEnter() {
   computeGridGeometry();
   loadBooks();
 
+  // RecentBooks mode: books IS RECENT_BOOKS.getBooks() (MRU-ordered), so index
+  // 0 already is the last-read book -- searching for it would be redundant and
+  // relies on RECENT_BOOKS.getBooks()[0] still matching books[0], which is
+  // circular reasoning about our own copy rather than a real search. Only
+  // Library mode needs to actually search the full-card list for it.
   selectedIndex = 0;
-  if (!books.empty()) {
+  if (source == Source::Library && !books.empty()) {
     const auto& recents = RECENT_BOOKS.getBooks();
     if (!recents.empty()) {
       const auto it = std::find_if(books.begin(), books.end(),
@@ -542,7 +563,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   std::string headerTitle;
   std::string subtitle;
   if (books.empty()) {
-    headerTitle = tr(STR_NO_BOOKS_FOUND);
+    headerTitle = source == Source::RecentBooks ? tr(STR_NO_RECENT_BOOKS) : tr(STR_NO_BOOKS_FOUND);
   } else {
     computeHeaderText(selectedIndex, pageStart, headerTitle, subtitle);
   }

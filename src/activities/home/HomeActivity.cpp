@@ -350,7 +350,13 @@ void HomeActivity::onFileBrowserOpen() {
   }
 }
 
-void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
+void HomeActivity::onRecentsOpen() {
+  if (SETTINGS.recentBooksView == CrossPointSettings::RECENT_BOOKS_COVERS) {
+    activityManager.goToCoverGridRecentBooks();
+  } else {
+    activityManager.goToRecentBooks();
+  }
+}
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

@@ -196,11 +196,17 @@ void ActivityManager::goToFileBrowser(std::string path) {
 }
 
 void ActivityManager::goToCoverGridBrowser() {
-  replaceActivity(std::make_unique<CoverGridBrowserActivity>(renderer, mappedInput));
+  replaceActivity(
+      std::make_unique<CoverGridBrowserActivity>(renderer, mappedInput, CoverGridBrowserActivity::Source::Library));
 }
 
 void ActivityManager::goToRecentBooks() {
   replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToCoverGridRecentBooks() {
+  replaceActivity(
+      std::make_unique<CoverGridBrowserActivity>(renderer, mappedInput, CoverGridBrowserActivity::Source::RecentBooks));
 }
 
 void ActivityManager::goToBrowser() {
@@ -233,7 +239,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser" || activityName == "CoverGridBrowser") {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == "RecentBooks") {
+    } else if (activityName == "RecentBooks" || activityName == "CoverGridRecentBooks") {
       initialMenuItem = HomeMenuItem::RECENTS;
     } else if (activityName == "OpdsBookBrowser") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;

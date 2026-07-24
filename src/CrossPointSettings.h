@@ -153,6 +153,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // File browser view: flat list (stock) or a paginated cover grid
   enum FILE_BROWSER_VIEW { FILE_BROWSER_LIST = 0, FILE_BROWSER_COVERS = 1, FILE_BROWSER_VIEW_COUNT };
 
+  // Recent books view: flat list (stock) or a paginated cover grid
+  enum RECENT_BOOKS_VIEW { RECENT_BOOKS_LIST = 0, RECENT_BOOKS_COVERS = 1, RECENT_BOOKS_VIEW_COUNT };
+
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
@@ -259,6 +262,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // File browser view: flat list (stock) or a paginated cover grid. Defaults to
   // list so existing users see no change until they opt in.
   uint8_t fileBrowserView = FILE_BROWSER_LIST;
+  // Recent books view: flat list (stock) or a paginated cover grid. Defaults to
+  // list so existing users see no change until they opt in.
+  uint8_t recentBooksView = RECENT_BOOKS_LIST;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
