@@ -77,7 +77,11 @@ void CoverGridBrowserActivity::computeGridGeometry() {
   cellHeight = gridHeight / rows;
   itemsPerPage = cols * rows;
 
-  const int titleAreaHeight = renderer.getLineHeight(SMALL_FONT_ID) + CARD_PADDING;
+  // With titles off, the caption row's space folds back into the cover box itself -- taller
+  // covers, not blank space -- which also means a different cache box size (see drawCell()'s
+  // Epub::generateThumbBmp(width, height) call): old with-titles thumbnails are simply never
+  // looked up at the new size, not explicitly invalidated.
+  const int titleAreaHeight = SETTINGS.coversShowTitles ? renderer.getLineHeight(SMALL_FONT_ID) + CARD_PADDING : 0;
   coverHeight = std::max(20, cellHeight - CARD_PADDING * 2 - titleAreaHeight);
   coverWidth = cellWidth - CARD_PADDING * 2;
 }
@@ -427,10 +431,10 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   }
 
   if (haveData && entries[flatIndex].isSeries) {
-    drawStackOverlay(innerX, innerY, innerW);
+    drawStackOverlay(innerX, innerY, innerW, coverHeight);
   }
 
-  if (!title.empty()) {
+  if (SETTINGS.coversShowTitles && !title.empty()) {
     const std::string truncated = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), innerW);
     renderer.drawText(SMALL_FONT_ID, innerX, innerY + coverHeight + CARD_PADDING, truncated.c_str());
   }
@@ -440,31 +444,37 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   }
 }
 
-void CoverGridBrowserActivity::drawStackOverlay(const int coverX, const int coverY, const int coverW) const {
-  // Two short strokes near the top-right corner, evoking books stacked behind the front cover.
-  // An inset overlay drawn on top of whatever's already in the box (real cover art or the
-  // no-cover fallback card) -- not a reserved layout strip, so cell/cache geometry never changes.
-  // Each stroke gets its own 1px white halo drawn first (rather than relying on an already-blank
-  // background, the way the selection ring below does) since real cover art under it isn't
-  // guaranteed to be light.
+void CoverGridBrowserActivity::drawStackOverlay(const int coverX, const int coverY, const int coverW,
+                                                const int coverH) const {
+  // A full-height spine line near the right edge, plus a shorter second line immediately to its
+  // left, vertically centered on the first -- evoking a second book's spine peeking out from
+  // behind the front cover. An inset overlay drawn on top of whatever's already in the box (real
+  // cover art or the no-cover fallback card) -- not a reserved layout strip, so cell/cache
+  // geometry never changes. Each line gets its own 1px white halo drawn first (rather than relying
+  // on an already-blank background, the way the selection ring below does) since real cover art
+  // under it isn't guaranteed to be light.
   constexpr int strokeWidth = 2;
-  constexpr int strokeHeight = 14;
+  constexpr int lineGap = 2;          // horizontal gap between the two lines
+  constexpr int insetFromRight = 4;   // the full-height line's distance from the cover's right edge
+  constexpr int topBottomMargin = 4;  // the full-height line's clearance from the cover's top/bottom
+  constexpr int shortLineHeight = 14;
   constexpr int haloPad = 1;
   const int rightEdge = coverX + coverW;
 
-  struct Stroke {
-    int insetFromRight;
-    int insetFromTop;
-  };
-  constexpr Stroke strokes[] = {{4, 6}, {8, 10}};
+  const int line1X = rightEdge - insetFromRight - strokeWidth;
+  const int line1Y = coverY + topBottomMargin;
+  const int line1Height = coverH - topBottomMargin * 2;
 
-  for (const auto& stroke : strokes) {
-    const int strokeX = rightEdge - stroke.insetFromRight - strokeWidth;
-    const int strokeY = coverY + stroke.insetFromTop;
-    renderer.fillRect(strokeX - haloPad, strokeY - haloPad, strokeWidth + haloPad * 2, strokeHeight + haloPad * 2,
-                      false);
-    renderer.fillRect(strokeX, strokeY, strokeWidth, strokeHeight, true);
-  }
+  const int line2X = line1X - lineGap - strokeWidth;
+  const int line1MidY = line1Y + line1Height / 2;
+  const int line2Y = line1MidY - shortLineHeight / 2;
+
+  const auto drawLine = [this](const int x, const int y, const int height) {
+    renderer.fillRect(x - haloPad, y - haloPad, strokeWidth + haloPad * 2, height + haloPad * 2, false);
+    renderer.fillRect(x, y, strokeWidth, height, true);
+  };
+  drawLine(line1X, line1Y, line1Height);
+  drawLine(line2X, line2Y, shortLineHeight);
 }
 
 void CoverGridBrowserActivity::cellOrigin(const int flatIndex, const int pageStart, int& outX, int& outY) const {

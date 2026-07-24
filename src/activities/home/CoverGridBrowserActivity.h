@@ -88,10 +88,11 @@ class CoverGridBrowserActivity final : public Activity {
   // regardless of mode without the caller needing to know which one it's in.
   void ensurePageLoaded();
   void drawCell(int flatIndex, int x, int y, bool selected) const;
-  // Corner-peek stack indicator for a collapsed series entry (>= 2 members): two short strokes
-  // near the cover's top-right corner, drawn over either a real cover or the no-cover fallback
-  // card -- an inset overlay, not a reserved layout strip, so it never changes cell/cache geometry.
-  void drawStackOverlay(int coverX, int coverY, int coverW) const;
+  // Stack indicator for a collapsed series entry (>= 2 members): a full-height spine line near
+  // the cover's right edge plus a shorter second line to its left, drawn over either a real cover
+  // or the no-cover fallback card -- an inset overlay, not a reserved layout strip, so it never
+  // changes cell/cache geometry.
+  void drawStackOverlay(int coverX, int coverY, int coverW, int coverH) const;
   // Top-left origin (in screen coordinates) of flatIndex's cell within the page
   // starting at pageStart. Shared by the full-grid compose and the
   // selection-only fast path so both draw from the same geometry.

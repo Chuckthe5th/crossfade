@@ -273,6 +273,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Collapse books sharing a series into one entry in Browse Books' Covers/Titles views (0 = off,
   // 1 = on). Does not affect the stock file browser or Recent Books. Default off.
   uint8_t groupBySeries = 0;
+  // Show each cell's title caption in the Covers grid (fileBrowserView/recentBooksView ==
+  // *_COVERS). Off reclaims the caption's vertical space to draw a taller cover instead --
+  // changes the thumbnail cache's cell size, so it regenerates at the new size rather than
+  // reusing anything cached for the with-titles layout (see Epub::getThumbBmpPath(w, h)).
+  // Default on, matching the grid's original behavior.
+  uint8_t coversShowTitles = 1;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
