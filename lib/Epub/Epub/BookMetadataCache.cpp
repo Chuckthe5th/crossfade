@@ -191,8 +191,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   serialization::BufferedFileReader spineIn(spineFile, BUILD_IO_BUFFER_SIZE);
   serialization::BufferedFileReader tocIn(tocFile, BUILD_IO_BUFFER_SIZE);
 
-  constexpr uint32_t headerASize =
-      sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
+  constexpr uint32_t headerASize = sizeof(uint32_t) /* fork magic */ + sizeof(BOOK_CACHE_VERSION) +
+                                   /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
   const uint32_t metadataSize = metadata.title.size() + metadata.author.size() + metadata.language.size() +
                                 metadata.coverItemHref.size() + metadata.textReferenceHref.size() +
                                 metadata.series.size() + sizeof(uint32_t) * 6 + sizeof(metadata.seriesIndex);
@@ -200,6 +200,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   const uint32_t lutOffset = headerASize + metadataSize;
 
   // Header A
+  serialization::writeForkMagic(bookOut);
   serialization::writePod(bookOut, BOOK_CACHE_VERSION);
   serialization::writePod(bookOut, lutOffset);
   serialization::writePod(bookOut, spineCount);
@@ -461,6 +462,13 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 
 bool BookMetadataCache::load() {
   if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
+    return false;
+  }
+
+  if (!serialization::readForkMagic(bookFile)) {
+    LOG_DBG("BMC", "Cache fork marker mismatch -- not this fork's book.bin");
+    // Explicit close() required: member variable persists beyond function scope
+    bookFile.close();
     return false;
   }
 

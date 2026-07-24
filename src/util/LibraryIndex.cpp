@@ -21,6 +21,11 @@ bool load(const std::string& path, Index& outIndex) {
     return false;  // Missing file -- expected before the first build, not an error.
   }
 
+  if (!serialization::readForkMagic(file)) {
+    LOG_DBG("LIBIDX", "Index fork marker mismatch -- not this fork's index");
+    return false;
+  }
+
   uint8_t version = 0;
   serialization::readPod(file, version);
   if (version != LIBRARY_INDEX_VERSION) {
@@ -73,6 +78,7 @@ bool save(const std::string& path, const Index& index) {
     return false;
   }
 
+  serialization::writeForkMagic(file);
   serialization::writePod(file, LIBRARY_INDEX_VERSION);
   serialization::writePod(file, index.lastBuildDurationMs);
   serialization::writePod(file, static_cast<uint32_t>(index.entries.size()));

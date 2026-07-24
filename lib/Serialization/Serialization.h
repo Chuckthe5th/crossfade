@@ -49,4 +49,28 @@ inline void readString(HalFile& file, std::string& s) {
   s.resize(len);
   file.read(&s[0], len);
 }
+
+// Shared 4-byte magic this fork stamps at the start of its own on-disk binary cache formats
+// (book.bin, library_index.bin), written before each format's own version byte. A numerically
+// colliding version byte from a differently-shaped format -- upstream's own book.bin/
+// library_index.bin, or a future upstream release that independently reaches the same version
+// number this fork is already using -- is never silently misinterpreted: the magic check runs
+// first and fails exactly like a version mismatch does, triggering the same safe, automatic
+// rebuild every existing version-mismatch path already performs. Not used for
+// crossfade-settings.json -- JSON's key-based fields are already self-describing (an unrecognized
+// key is ignored, a missing one falls back to its default), so there's no positional-misread
+// hazard for a marker to guard against there.
+constexpr uint32_t FORK_MAGIC = 0x44465243;  // on disk (little-endian): 'C', 'R', 'F', 'D'
+
+template <typename F>
+void writeForkMagic(F& file) {
+  writePod(file, FORK_MAGIC);
+}
+
+template <typename F>
+bool readForkMagic(F& file) {
+  uint32_t magic = 0;
+  readPod(file, magic);
+  return magic == FORK_MAGIC;
+}
 }  // namespace serialization

@@ -114,11 +114,25 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
   doc["language"] = (language < getLanguageCount()) ? LANGUAGE_CODES[language] : "EN";
+
+  // Identity stamp, not a compatibility gate: unlike book.bin/library_index.bin's binary FORK_MAGIC
+  // (see Serialization.h), this file's fields are self-describing JSON keys, so there's no
+  // positional-misread risk for a marker to guard against, and rejecting a whole settings file over
+  // a marker mismatch would mean discarding a user's irreplaceable preferences instead of a
+  // freely-regenerable cache. Written purely so a settings file that ends up somewhere unexpected
+  // is unambiguous about which fork wrote it -- see fromJson()'s handling.
+  doc["_fork"] = "crossfade";
 }
 
 bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   CrossPointSettings& s = *this;
   bool needsResave = false;
+
+  const char* fork = doc["_fork"] | "";
+  if (fork[0] != '\0' && strcmp(fork, "crossfade") != 0) {
+    // Diagnostic only -- see toJson()'s comment on why this never blocks loading.
+    LOG_ERR("CPS", "Settings file's fork marker is '%s', not 'crossfade' -- loading anyway", fork);
+  }
 
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
 
