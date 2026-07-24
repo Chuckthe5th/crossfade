@@ -520,6 +520,11 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
     std::string headerTitle;
     std::string subtitle;
     computeHeaderText(selectedIndex, pageStart, headerTitle, subtitle);
+    // Not every theme's drawHeader clears its own rect first (LyraTheme does;
+    // BaseTheme/RoundedRaffTheme draw straight over whatever's already there,
+    // relying on the caller's clearScreen()) -- same gap as drawCell had, so
+    // clear it ourselves rather than assume the theme will.
+    renderer.fillRect(0, metrics.topPadding, pageWidth, metrics.headerHeight, false);
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                    headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle.empty() ? nullptr : subtitle.c_str());
 
