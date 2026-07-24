@@ -55,8 +55,7 @@ Result resolve(const std::string& path, const int coverWidth, const int coverHei
           result.hasCover = true;
         }
       }
-      LOG_DBG("BMR-PERF",
-              "resolve EPUB \"%s\": bookBinCached=%d metadataResolveMs=%lu coverRequested=%d totalMs=%lu",
+      LOG_DBG("BMR-PERF", "resolve EPUB \"%s\": bookBinCached=%d metadataResolveMs=%lu coverRequested=%d totalMs=%lu",
               path.c_str(), wasCachedBook, static_cast<unsigned long>(metaMs), wantCover,
               static_cast<unsigned long>(millis() - startMs));
     } else {

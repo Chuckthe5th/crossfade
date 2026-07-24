@@ -13,6 +13,7 @@
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
+#include "home/LibraryListActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
@@ -200,6 +201,10 @@ void ActivityManager::goToCoverGridBrowser() {
       std::make_unique<CoverGridBrowserActivity>(renderer, mappedInput, CoverGridBrowserActivity::Source::Library));
 }
 
+void ActivityManager::goToLibraryList() {
+  replaceActivity(std::make_unique<LibraryListActivity>(renderer, mappedInput));
+}
+
 void ActivityManager::goToRecentBooks() {
   replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
 }
@@ -237,7 +242,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
-    if (activityName == "FileBrowser" || activityName == "CoverGridBrowser") {
+    if (activityName == "FileBrowser" || activityName == "CoverGridBrowser" || activityName == "LibraryList") {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
     } else if (activityName == "RecentBooks" || activityName == "CoverGridRecentBooks") {
       initialMenuItem = HomeMenuItem::RECENTS;

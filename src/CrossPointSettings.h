@@ -150,8 +150,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // UI Theme
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3 };
 
-  // File browser view: flat list (stock) or a paginated cover grid
-  enum FILE_BROWSER_VIEW { FILE_BROWSER_LIST = 0, FILE_BROWSER_COVERS = 1, FILE_BROWSER_VIEW_COUNT };
+  // File browser view: stock file/folder list, a paginated cover grid, or a flat title+author list
+  enum FILE_BROWSER_VIEW {
+    FILE_BROWSER_LIST = 0,
+    FILE_BROWSER_COVERS = 1,
+    FILE_BROWSER_TITLES = 2,
+    FILE_BROWSER_VIEW_COUNT
+  };
 
   // Recent books view: flat list (stock) or a paginated cover grid
   enum RECENT_BOOKS_VIEW { RECENT_BOOKS_LIST = 0, RECENT_BOOKS_COVERS = 1, RECENT_BOOKS_VIEW_COUNT };

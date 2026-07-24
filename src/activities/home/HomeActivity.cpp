@@ -343,10 +343,16 @@ void HomeActivity::render(RenderLock&&) {
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void HomeActivity::onFileBrowserOpen() {
-  if (SETTINGS.fileBrowserView == CrossPointSettings::FILE_BROWSER_COVERS) {
-    activityManager.goToCoverGridBrowser();
-  } else {
-    activityManager.goToFileBrowser();
+  switch (SETTINGS.fileBrowserView) {
+    case CrossPointSettings::FILE_BROWSER_COVERS:
+      activityManager.goToCoverGridBrowser();
+      break;
+    case CrossPointSettings::FILE_BROWSER_TITLES:
+      activityManager.goToLibraryList();
+      break;
+    default:
+      activityManager.goToFileBrowser();
+      break;
   }
 }
 
