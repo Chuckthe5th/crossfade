@@ -391,6 +391,14 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   // so a cache hit needs no rescale in drawBitmap1Bit below.
   const int innerW = coverWidth;
 
+  // Blank this cell's full bounds first. drawCell can run without a preceding
+  // clearScreen() (the selection-move fast path only redraws the two affected
+  // cells), and the selection fill/ring below are drawn additively with no
+  // complementary erase for the deselected state -- without this, a cell that
+  // was selected (solid fill, or a highlight ring) stays marked that way after
+  // losing the highlight, since only clearScreen() used to blank it first.
+  renderer.fillRect(x, y, cellWidth, cellHeight, false);
+
   bool drewCover = false;
   std::string title;
   if (haveData) {
