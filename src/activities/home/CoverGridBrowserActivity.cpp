@@ -446,37 +446,37 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
 
 void CoverGridBrowserActivity::drawStackOverlay(const int coverX, const int coverY, const int coverW,
                                                 const int coverH) const {
-  // A full-height spine line as the inner line (further left, closer to the cover's own edge),
-  // plus a shorter second line as the outer line (nearer the cover's right edge), vertically
-  // centered on the full line's midpoint -- evoking a second book's spine peeking out from behind
-  // the front cover. An inset overlay drawn on top of whatever's already in the box (real cover
-  // art or the no-cover fallback card) -- not a reserved layout strip, so cell/cache geometry
-  // never changes. Each line gets its own 1px white halo drawn first (rather than relying on an
-  // already-blank background, the way the selection ring below does) since real cover art under
-  // it isn't guaranteed to be light.
+  // Three lines ordered inner-to-outer by height (inner = full height, outer = shortest, nearest
+  // the cover's right edge), all vertically centered on the cover's own midpoint -- evoking a
+  // stack of books peeking out from behind the front cover. An inset overlay drawn on top of
+  // whatever's already in the box (real cover art or the no-cover fallback card) -- not a reserved
+  // layout strip, so cell/cache geometry never changes. Each line gets its own 1px white halo
+  // drawn first (rather than relying on an already-blank background, the way the selection ring
+  // below does) since real cover art under it isn't guaranteed to be light.
   constexpr int strokeWidth = 2;
-  constexpr int lineGap = 2;              // horizontal gap between the two lines
-  constexpr int outerInsetFromRight = 4;  // the short (outer) line's distance from the cover's right edge
-  constexpr int topBottomMargin = 4;      // the full (inner) line's clearance from the cover's top/bottom
+  constexpr int lineGap = 3;              // horizontal gap between adjacent lines
+  constexpr int outerInsetFromRight = 4;  // the outermost line's distance from the cover's right edge
+  constexpr int topBottomMargin = 4;      // the inner (full-height) line's clearance from top/bottom
   constexpr int haloPad = 1;
   const int rightEdge = coverX + coverW;
+  const int midY = coverY + coverH / 2;
 
   const int outerX = rightEdge - outerInsetFromRight - strokeWidth;
-  const int innerX = outerX - lineGap - strokeWidth;
+  const int middleX = outerX - lineGap - strokeWidth;
+  const int innerX = middleX - lineGap - strokeWidth;
 
-  const int fullY = coverY + topBottomMargin;
-  const int fullHeight = coverH - topBottomMargin * 2;
-  const int fullMidY = fullY + fullHeight / 2;
+  const int innerHeight = coverH - topBottomMargin * 2;
+  const int middleHeight = coverH * 87 / 100;
+  const int outerHeight = coverH * 75 / 100;
 
-  const int shortHeight = coverH * 3 / 4;
-  const int shortY = fullMidY - shortHeight / 2;
-
-  const auto drawLine = [this](const int x, const int y, const int height) {
+  const auto drawLine = [this](const int x, const int centerY, const int height) {
+    const int y = centerY - height / 2;
     renderer.fillRect(x - haloPad, y - haloPad, strokeWidth + haloPad * 2, height + haloPad * 2, false);
     renderer.fillRect(x, y, strokeWidth, height, true);
   };
-  drawLine(innerX, fullY, fullHeight);
-  drawLine(outerX, shortY, shortHeight);
+  drawLine(innerX, midY, innerHeight);
+  drawLine(middleX, midY, middleHeight);
+  drawLine(outerX, midY, outerHeight);
 }
 
 void CoverGridBrowserActivity::cellOrigin(const int flatIndex, const int pageStart, int& outX, int& outY) const {
