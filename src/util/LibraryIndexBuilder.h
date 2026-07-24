@@ -69,3 +69,11 @@ class LibraryIndexBuilder {
   // deletion-only delta has no parse work but still needs a commit() to drop the stale entry.
   bool dirty = false;
 };
+
+// Passive staleness check for the automatic triggers that don't need (or want) an interactive
+// rebuild -- cold boot, File Transfer exit, OPDS download complete. Runs the same cheap delta
+// scan LibraryIndexBuilder::begin() does, but never parses a single book and shows no UI --
+// just logs if a rebuild is pending, leaving the actual resolution to the next Browse Books
+// entry (which does need the result and shows the cancellable build) or the manual Settings
+// action. A no-op if SETTINGS.groupBySeries is off.
+void checkLibraryIndexStaleness();

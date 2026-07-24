@@ -18,6 +18,7 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
+#include "util/LibraryIndexBuilder.h"
 #include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
 #include "util/UrlUtils.h"
@@ -394,6 +395,9 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   if (result == HttpDownloader::OK) {
     clearBookCache(filename);
     state = BrowserState::BROWSING;
+    // A no-op unless SETTINGS.groupBySeries is on; logs only, never blocks -- the actual
+    // resolution happens on the next Browse Books entry (or the manual Settings action).
+    checkLibraryIndexStaleness();
   } else {
     LOG_ERR("OPDS", "Download failed: %d", static_cast<int>(result));
     state = BrowserState::ERROR;

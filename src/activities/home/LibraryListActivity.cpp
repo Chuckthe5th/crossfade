@@ -8,27 +8,31 @@
 #include <algorithm>
 
 #include "../reader/EpubReaderUtils.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/BookMetadataResolver.h"
 
-namespace {
-// Same cap and reasoning as CoverGridBrowserActivity::MAX_GRID_BOOKS: bounds the recursive SD-card
-// walk's transient RAM (~80 bytes/path worst case), held only while this activity is on screen.
-constexpr size_t MAX_LIST_BOOKS = 2000;
-}  // namespace
-
-void LibraryListActivity::loadBooks() {
-  books = LibraryScanner::scanAllBooks("/", MAX_LIST_BOOKS);
-  // Same filename sort CoverGridBrowserActivity's Covers grid applies to its Library source -- both
-  // are views over the same scanAllBooks() result, so they present the same order.
-  LibraryScanner::sortByFilename(books);
+std::vector<LibraryGrouping::Entry>& LibraryListActivity::currentEntries() {
+  if (seriesTopIndex >= 0 && seriesTopIndex < static_cast<int>(topLevelEntries.size())) {
+    return topLevelEntries[seriesTopIndex].members;
+  }
+  return topLevelEntries;
 }
 
+const std::vector<LibraryGrouping::Entry>& LibraryListActivity::currentEntries() const {
+  if (seriesTopIndex >= 0 && seriesTopIndex < static_cast<int>(topLevelEntries.size())) {
+    return topLevelEntries[seriesTopIndex].members;
+  }
+  return topLevelEntries;
+}
+
+void LibraryListActivity::loadBooks() { topLevelEntries = LibraryGrouping::loadLibraryEntries(SETTINGS.groupBySeries); }
+
 void LibraryListActivity::ensurePageLoaded(const int itemsPerPage) {
-  if (books.empty() || itemsPerPage <= 0) {
+  auto& entries = currentEntries();
+  if (entries.empty() || itemsPerPage <= 0) {
     return;
   }
   const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
@@ -36,41 +40,48 @@ void LibraryListActivity::ensurePageLoaded(const int itemsPerPage) {
     return;
   }
 
-  const int pageEnd = std::min(static_cast<int>(books.size()), pageStart + itemsPerPage);
-  pageRows.assign(pageEnd - pageStart, RowCache{});
-  for (int i = pageStart; i < pageEnd; i++) {
-    const BookMetadataResolver::Result result = BookMetadataResolver::resolve(books[i].path);
-    pageRows[i - pageStart] = RowCache{result.title, result.author};
-  }
+  // No cover box, no loading popup: unlike the grid, this never touches SD for anything but the
+  // (cheap, metadata-only) text resolve, and LibraryGrouping::resolvePage() is a no-op per entry
+  // that's already resolved -- always true in grouped mode, where the whole page arrives
+  // pre-resolved from the index.
+  const int pageEnd = std::min(static_cast<int>(entries.size()), pageStart + itemsPerPage);
+  LibraryGrouping::resolvePage(entries, pageStart, pageEnd);
   loadedPageStart = pageStart;
 }
 
-std::string LibraryListActivity::rowTitle(const int index, const int itemsPerPage) const {
-  const int pageStart = (index / itemsPerPage) * itemsPerPage;
-  const int rowIdx = index - pageStart;
-  if (loadedPageStart == pageStart && rowIdx >= 0 && rowIdx < static_cast<int>(pageRows.size())) {
-    return pageRows[rowIdx].title;
+std::string LibraryListActivity::rowTitle(const int index) const {
+  const auto& entries = currentEntries();
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return "";
   }
-  return "";
+  return entries[index].title;
 }
 
-std::string LibraryListActivity::rowAuthor(const int index, const int itemsPerPage) const {
-  const int pageStart = (index / itemsPerPage) * itemsPerPage;
-  const int rowIdx = index - pageStart;
-  if (loadedPageStart == pageStart && rowIdx >= 0 && rowIdx < static_cast<int>(pageRows.size())) {
-    return pageRows[rowIdx].author;
+std::string LibraryListActivity::rowAuthor(const int index) const {
+  const auto& entries = currentEntries();
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return "";
   }
-  return "";
+  return entries[index].author;
 }
 
-void LibraryListActivity::computeHeaderText(const int index, const int itemsPerPage, std::string& outTitle,
-                                            std::string& outSubtitle) const {
-  outTitle = rowTitle(index, itemsPerPage);
+void LibraryListActivity::computeHeaderText(const int index, std::string& outTitle, std::string& outSubtitle) const {
+  outTitle.clear();
   outSubtitle.clear();
+  const auto& entries = currentEntries();
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return;
+  }
+  const auto& entry = entries[index];
+  outTitle = entry.title;
 
-  const std::string& path = books[index].path;
-  if (FsHelpers::hasEpubExtension(path)) {
-    const Epub epub(path, "/.crosspoint");
+  if (entry.isSeries) {
+    // No single book's reading progress applies to a collapsed multi-book entry.
+    return;
+  }
+
+  if (FsHelpers::hasEpubExtension(entry.path)) {
+    const Epub epub(entry.path, "/.crosspoint");
     int spineIndex = 0;
     int pageNumber = 0;
     int pageCount = 0;
@@ -80,34 +91,81 @@ void LibraryListActivity::computeHeaderText(const int index, const int itemsPerP
   }
 }
 
+void LibraryListActivity::enterSeries(const int topLevelIndex) {
+  savedTopLevelSelectedIndex = topLevelIndex;
+  seriesTopIndex = topLevelIndex;
+  selectedIndex = 0;
+  loadedPageStart = -1;
+  requestUpdate();
+}
+
+void LibraryListActivity::exitSeries() {
+  seriesTopIndex = -1;
+  selectedIndex = savedTopLevelSelectedIndex;
+  loadedPageStart = -1;
+  requestUpdate();
+}
+
+void LibraryListActivity::activateSelected() {
+  auto& entries = currentEntries();
+  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(entries.size())) {
+    return;
+  }
+  if (entries[selectedIndex].isSeries) {
+    enterSeries(selectedIndex);
+  } else {
+    activityManager.goToReader(entries[selectedIndex].path);
+  }
+}
+
+void LibraryListActivity::selectLastRead() {
+  selectedIndex = 0;
+  seriesTopIndex = -1;
+  if (topLevelEntries.empty()) {
+    return;
+  }
+  const auto& recents = RECENT_BOOKS.getBooks();
+  if (recents.empty()) {
+    return;
+  }
+  const std::string& lastReadPath = recents[0].path;
+
+  for (int i = 0; i < static_cast<int>(topLevelEntries.size()); i++) {
+    const auto& entry = topLevelEntries[i];
+    if (!entry.isSeries) {
+      if (entry.path == lastReadPath) {
+        selectedIndex = i;
+        return;
+      }
+      continue;
+    }
+    for (int m = 0; m < static_cast<int>(entry.members.size()); m++) {
+      if (entry.members[m].path == lastReadPath) {
+        seriesTopIndex = i;
+        savedTopLevelSelectedIndex = i;
+        selectedIndex = m;
+        return;
+      }
+    }
+  }
+}
+
 void LibraryListActivity::onEnter() {
   Activity::onEnter();
 
   loadBooks();
-
-  // Lands on the last-read book, same as CoverGridBrowserActivity's Library source -- both are
-  // whole-library metadata views with no folder concept of their own to return to.
-  selectedIndex = 0;
-  if (!books.empty()) {
-    const auto& recents = RECENT_BOOKS.getBooks();
-    if (!recents.empty()) {
-      const auto it = std::find_if(books.begin(), books.end(),
-                                   [&recents](const LibraryScanner::Entry& e) { return e.path == recents[0].path; });
-      if (it != books.end()) {
-        selectedIndex = static_cast<int>(std::distance(books.begin(), it));
-      }
-    }
-  }
+  // Lands on the last-read book, same as CoverGridBrowserActivity -- both are whole-library
+  // metadata views with no folder concept of their own to return to. Drills directly into a
+  // series if the last-read book is one of its members (see selectLastRead()).
+  selectLastRead();
 
   loadedPageStart = -1;
-  pageRows.clear();
   requestUpdate();
 }
 
 void LibraryListActivity::onExit() {
   Activity::onExit();
-  books.clear();
-  pageRows.clear();
+  topLevelEntries.clear();
 }
 
 void LibraryListActivity::loop() {
@@ -118,18 +176,16 @@ void LibraryListActivity::loop() {
       renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (!books.empty() && selectedIndex < static_cast<int>(books.size())) {
-      activityManager.goToReader(books[selectedIndex].path);
-    }
+    activateSelected();
     return;
   }
 
   int touchSel = selectedIndex;
-  const auto listTouch = handleListTouch(touchSel, static_cast<int>(books.size()), contentTop, contentHeight, true);
+  const auto listTouch = handleListTouch(touchSel, currentCount(), contentTop, contentHeight, true);
   if (listTouch != ListTouchResult::None) {
     selectedIndex = touchSel;
     if (listTouch == ListTouchResult::Activated) {
-      activityManager.goToReader(books[selectedIndex].path);
+      activateSelected();
     } else {
       requestUpdate();
     }
@@ -137,11 +193,15 @@ void LibraryListActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoHome();
+    if (seriesTopIndex >= 0) {
+      exitSeries();
+    } else {
+      onGoHome();
+    }
     return;
   }
 
-  const int listSize = static_cast<int>(books.size());
+  const int listSize = currentCount();
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
     selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, listSize, pageItems);
@@ -183,6 +243,8 @@ void LibraryListActivity::render(RenderLock&&) {
   // displayBuffer() call, no placeholder pass while metadata resolves behind it.
   ensurePageLoaded(itemsPerPage);
 
+  const auto& entries = currentEntries();
+
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -191,10 +253,10 @@ void LibraryListActivity::render(RenderLock&&) {
 
   std::string headerTitle;
   std::string subtitle;
-  if (books.empty()) {
+  if (entries.empty()) {
     headerTitle = tr(STR_NO_BOOKS_FOUND);
   } else {
-    computeHeaderText(selectedIndex, itemsPerPage, headerTitle, subtitle);
+    computeHeaderText(selectedIndex, headerTitle, subtitle);
   }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                  headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle.empty() ? nullptr : subtitle.c_str());
@@ -202,15 +264,15 @@ void LibraryListActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
-  if (!books.empty()) {
+  if (!entries.empty()) {
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(books.size()), selectedIndex,
-        [this, itemsPerPage](int index) { return rowTitle(index, itemsPerPage); },
-        [this, itemsPerPage](int index) { return rowAuthor(index, itemsPerPage); },
-        [this](int index) { return UITheme::getFileIcon(books[index].path); });
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(entries.size()), selectedIndex,
+        [this](int index) { return rowTitle(index); }, [this](int index) { return rowAuthor(index); },
+        [this](int index) { return UITheme::getFileIcon(currentEntries()[index].path); });
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(seriesTopIndex >= 0 ? tr(STR_BACK) : tr(STR_HOME), tr(STR_OPEN),
+                                            tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

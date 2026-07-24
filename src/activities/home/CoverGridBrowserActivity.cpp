@@ -6,16 +6,15 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include <Logging.h>
 
 #include <algorithm>
 
 #include "../reader/EpubReaderUtils.h"
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/BookMetadataResolver.h"
 
 namespace {
 // Target cell size grid columns/rows are derived from at runtime -- never a
@@ -24,11 +23,6 @@ namespace {
 constexpr int TARGET_CELL_WIDTH = 140;
 constexpr int TARGET_CELL_HEIGHT = 190;
 constexpr int CARD_PADDING = 6;
-// Bounds the recursive SD-card walk's RAM: each entry is one full path
-// std::string. At this cap, worst case is roughly 2000 * ~80 bytes =~ 160 KB,
-// held only while this activity is on screen and freed in onExit(). Typical
-// libraries are far smaller; LibraryScanner logs if the card holds more.
-constexpr size_t MAX_GRID_BOOKS = 2000;
 // Matches ButtonNavigator's own continuous-hold repeat interval -- a familiar
 // "still working" cadence -- rather than refreshing the panel once per cell.
 constexpr uint32_t PROGRESS_UPDATE_INTERVAL_MS = 500;
@@ -48,6 +42,20 @@ float fitScale(int srcW, int srcH, int maxW, int maxH) {
   return scale;
 }
 }  // namespace
+
+std::vector<LibraryGrouping::Entry>& CoverGridBrowserActivity::currentEntries() {
+  if (seriesTopIndex >= 0 && seriesTopIndex < static_cast<int>(topLevelEntries.size())) {
+    return topLevelEntries[seriesTopIndex].members;
+  }
+  return topLevelEntries;
+}
+
+const std::vector<LibraryGrouping::Entry>& CoverGridBrowserActivity::currentEntries() const {
+  if (seriesTopIndex >= 0 && seriesTopIndex < static_cast<int>(topLevelEntries.size())) {
+    return topLevelEntries[seriesTopIndex].members;
+  }
+  return topLevelEntries;
+}
 
 void CoverGridBrowserActivity::computeGridGeometry() {
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -75,41 +83,32 @@ void CoverGridBrowserActivity::computeGridGeometry() {
 }
 
 void CoverGridBrowserActivity::loadBooks() {
+  topLevelEntries.clear();
   if (source == Source::RecentBooks) {
-    // Mirrors RecentBooksActivity::onEnter(): prune entries whose backing
-    // files are gone before displaying the list.
+    // Mirrors RecentBooksActivity::onEnter(): prune entries whose backing files are gone before
+    // displaying the list. Never grouped -- RecentBooksStore already has title/author cached, so
+    // entries start fully resolved (no lazy text step needed), same as grouped mode gets from the
+    // index, just via a different source.
     if (RECENT_BOOKS.pruneMissing()) {
       RECENT_BOOKS.saveToFile();
     }
     const auto& recentBooks = RECENT_BOOKS.getBooks();
-    books.clear();
-    books.reserve(recentBooks.size());
+    topLevelEntries.reserve(recentBooks.size());
     for (const auto& book : recentBooks) {
-      books.push_back(LibraryScanner::Entry{book.path});
+      LibraryGrouping::Entry e;
+      e.path = book.path;
+      e.title = book.title;
+      e.author = book.author;
+      topLevelEntries.push_back(std::move(e));
     }
     return;
   }
-  books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS);
-  // Same filename sort LibraryListActivity's Titles list applies -- both are views over the same
-  // scanAllBooks() result, so toggling fileBrowserView presents the same library in the same order
-  // instead of reshuffling it. Metadata-free (filenames are already known), so this costs nothing;
-  // the per-cell thumbnail cache is keyed by path/size, not position, so reordering doesn't touch it.
-  LibraryScanner::sortByFilename(books);
-}
-
-// Thin wrapper over the shared resolver (also used by LibraryListActivity for the text-only List
-// view): asks for a cover in this grid's exact cell box, so a cache hit needs no rescale in
-// drawCell's drawBitmap1Bit call below.
-bool CoverGridBrowserActivity::resolveCell(const std::string& path, GridCell& cell) const {
-  const BookMetadataResolver::Result result = BookMetadataResolver::resolve(path, coverWidth, coverHeight);
-  cell.title = result.title;
-  cell.coverThumbPath = result.coverThumbPath;
-  cell.hasCover = result.hasCover;
-  return result.coverGenerated;
+  topLevelEntries = LibraryGrouping::loadLibraryEntries(SETTINGS.groupBySeries);
 }
 
 void CoverGridBrowserActivity::ensurePageLoaded() {
-  if (books.empty() || itemsPerPage <= 0) {
+  auto& entries = currentEntries();
+  if (entries.empty() || itemsPerPage <= 0) {
     return;
   }
   const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
@@ -117,23 +116,20 @@ void CoverGridBrowserActivity::ensurePageLoaded() {
     return;
   }
 
-  const uint32_t pageLoadStartMs = millis();
-  const int pageEnd = std::min(static_cast<int>(books.size()), pageStart + itemsPerPage);
-  pageCells.assign(pageEnd - pageStart, GridCell{});
-
-  // A loading popup -- and the extra e-ink refreshes it costs -- only appears
-  // when a cell actually needs its thumbnail generated. A page whose covers
-  // are all already cached resolves silently here; the caller's single
-  // end-of-render displayBuffer() is the only refresh that page turn pays.
-  // When generation IS needed, progress updates are throttled to at most one
+  // A loading popup -- and the extra e-ink refreshes it costs -- only appears when an entry
+  // actually needs its thumbnail generated (LibraryGrouping::resolvePage() is a no-op for
+  // anything already resolved, grouped or not). A page whose covers are all already cached
+  // resolves silently here; the caller's single end-of-render displayBuffer() is the only refresh
+  // that page turn pays. When generation IS needed, progress updates are throttled to at most one
   // every PROGRESS_UPDATE_INTERVAL_MS, not one per cell.
+  const int pageEnd = std::min(static_cast<int>(entries.size()), pageStart + itemsPerPage);
+  const int count = pageEnd - pageStart;
+
   Rect popupRect;
   bool showingLoading = false;
   uint32_t lastProgressUpdateMs = 0;
-  const int count = pageEnd - pageStart;
-  int progressRefreshCount = 0;
   for (int i = pageStart; i < pageEnd; i++) {
-    const bool generated = resolveCell(books[i].path, pageCells[i - pageStart]);
+    const bool generated = LibraryGrouping::resolvePage(entries, i, i + 1, coverWidth, coverHeight);
     if (!generated) {
       continue;
     }
@@ -143,17 +139,79 @@ void CoverGridBrowserActivity::ensurePageLoaded() {
       popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
       GUI.fillPopupProgress(renderer, popupRect, 10 + (i - pageStart) * 90 / std::max(1, count));
       lastProgressUpdateMs = nowMs;
-      progressRefreshCount++;
     } else if (nowMs - lastProgressUpdateMs >= PROGRESS_UPDATE_INTERVAL_MS) {
       GUI.fillPopupProgress(renderer, popupRect, 10 + (i - pageStart) * 90 / std::max(1, count));
       lastProgressUpdateMs = nowMs;
-      progressRefreshCount++;
     }
   }
-  LOG_DBG("CGB-PERF", "ensurePageLoaded page=%d cells=%d progressBarRefreshes=%d totalMs=%lu", pageStart, count,
-          progressRefreshCount, static_cast<unsigned long>(millis() - pageLoadStartMs));
 
   loadedPageStart = pageStart;
+}
+
+void CoverGridBrowserActivity::enterSeries(const int topLevelIndex) {
+  savedTopLevelSelectedIndex = topLevelIndex;
+  seriesTopIndex = topLevelIndex;
+  selectedIndex = 0;
+  loadedPageStart = -1;
+  lastRenderedIndex = -1;
+  hasComposedPage = false;
+  requestUpdate();
+}
+
+void CoverGridBrowserActivity::exitSeries() {
+  seriesTopIndex = -1;
+  selectedIndex = savedTopLevelSelectedIndex;
+  loadedPageStart = -1;
+  lastRenderedIndex = -1;
+  hasComposedPage = false;
+  requestUpdate();
+}
+
+void CoverGridBrowserActivity::activateSelected() {
+  auto& entries = currentEntries();
+  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(entries.size())) {
+    return;
+  }
+  if (entries[selectedIndex].isSeries) {
+    enterSeries(selectedIndex);
+  } else {
+    activityManager.goToReader(entries[selectedIndex].path);
+  }
+}
+
+void CoverGridBrowserActivity::selectLastRead() {
+  selectedIndex = 0;
+  seriesTopIndex = -1;
+  // RecentBooks is already MRU-ordered -- index 0 already is the last-read book, and Library mode
+  // is the only source that flattens the whole card, so it's the only one worth actually
+  // searching. See CoverGridBrowserActivity.h for why the drill-in-directly behavior matters.
+  if (source != Source::Library || topLevelEntries.empty()) {
+    return;
+  }
+  const auto& recents = RECENT_BOOKS.getBooks();
+  if (recents.empty()) {
+    return;
+  }
+  const std::string& lastReadPath = recents[0].path;
+
+  for (int i = 0; i < static_cast<int>(topLevelEntries.size()); i++) {
+    const auto& entry = topLevelEntries[i];
+    if (!entry.isSeries) {
+      if (entry.path == lastReadPath) {
+        selectedIndex = i;
+        return;
+      }
+      continue;
+    }
+    for (int m = 0; m < static_cast<int>(entry.members.size()); m++) {
+      if (entry.members[m].path == lastReadPath) {
+        seriesTopIndex = i;
+        savedTopLevelSelectedIndex = i;
+        selectedIndex = m;
+        return;
+      }
+    }
+  }
 }
 
 void CoverGridBrowserActivity::onEnter() {
@@ -161,26 +219,9 @@ void CoverGridBrowserActivity::onEnter() {
 
   computeGridGeometry();
   loadBooks();
-
-  // RecentBooks mode: books IS RECENT_BOOKS.getBooks() (MRU-ordered), so index
-  // 0 already is the last-read book -- searching for it would be redundant and
-  // relies on RECENT_BOOKS.getBooks()[0] still matching books[0], which is
-  // circular reasoning about our own copy rather than a real search. Only
-  // Library mode needs to actually search the full-card list for it.
-  selectedIndex = 0;
-  if (source == Source::Library && !books.empty()) {
-    const auto& recents = RECENT_BOOKS.getBooks();
-    if (!recents.empty()) {
-      const auto it = std::find_if(books.begin(), books.end(),
-                                   [&recents](const LibraryScanner::Entry& e) { return e.path == recents[0].path; });
-      if (it != books.end()) {
-        selectedIndex = static_cast<int>(std::distance(books.begin(), it));
-      }
-    }
-  }
+  selectLastRead();
 
   loadedPageStart = -1;
-  pageCells.clear();
   lastRenderedIndex = -1;
   hasComposedPage = false;
 
@@ -189,8 +230,7 @@ void CoverGridBrowserActivity::onEnter() {
 
 void CoverGridBrowserActivity::onExit() {
   Activity::onExit();
-  books.clear();
-  pageCells.clear();
+  topLevelEntries.clear();
 }
 
 int CoverGridBrowserActivity::hitTestCell(const int tx, const int ty) const {
@@ -204,14 +244,14 @@ int CoverGridBrowserActivity::hitTestCell(const int tx, const int ty) const {
   }
   const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
   const int flatIndex = pageStart + row * cols + col;
-  if (flatIndex >= static_cast<int>(books.size())) {
+  if (flatIndex >= currentCount()) {
     return -1;
   }
   return flatIndex;
 }
 
 int CoverGridBrowserActivity::stepRowDown() const {
-  const int n = static_cast<int>(books.size());
+  const int n = currentCount();
   if (n == 0 || cols <= 0) {
     return selectedIndex;
   }
@@ -222,7 +262,7 @@ int CoverGridBrowserActivity::stepRowDown() const {
 }
 
 int CoverGridBrowserActivity::stepRowUp() const {
-  const int n = static_cast<int>(books.size());
+  const int n = currentCount();
   if (n == 0 || cols <= 0) {
     return selectedIndex;
   }
@@ -239,7 +279,7 @@ int CoverGridBrowserActivity::stepRowUp() const {
 }
 
 int CoverGridBrowserActivity::stepColumn(const int delta) const {
-  const int n = static_cast<int>(books.size());
+  const int n = currentCount();
   if (n == 0 || cols <= 0) {
     return selectedIndex;
   }
@@ -254,18 +294,22 @@ void CoverGridBrowserActivity::loop() {
   using Button = MappedInputManager::Button;
 
   // The grid has no directory nesting (it flattens the whole card), so unlike
-  // FileBrowserActivity there's no "go up one level" state -- Back always
-  // returns straight to Home, matching FileBrowserActivity's root-level Back.
+  // FileBrowserActivity there's no "go up one level" state for folders -- but a series page is
+  // one level of nesting, so Back exits that before ever reaching Home.
   if (mappedInput.wasReleased(Button::Back)) {
-    onGoHome();
+    if (seriesTopIndex >= 0) {
+      exitSeries();
+    } else {
+      onGoHome();
+    }
     return;
   }
 
-  if (books.empty()) {
+  if (currentCount() == 0) {
     return;
   }
 
-  const int totalBooks = static_cast<int>(books.size());
+  const int total = currentCount();
 
   // Rows: side Up/Down. Single step on release (matching FileBrowserActivity/
   // RecentBooksActivity's release-edge convention for paginated lists);
@@ -280,12 +324,12 @@ void CoverGridBrowserActivity::loop() {
     selectedIndex = stepRowUp();
     requestUpdate();
   });
-  buttonNavigator.onContinuous({Button::Down}, [this, totalBooks] {
-    selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, totalBooks, itemsPerPage);
+  buttonNavigator.onContinuous({Button::Down}, [this, total] {
+    selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, total, itemsPerPage);
     requestUpdate();
   });
-  buttonNavigator.onContinuous({Button::Up}, [this, totalBooks] {
-    selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, totalBooks, itemsPerPage);
+  buttonNavigator.onContinuous({Button::Up}, [this, total] {
+    selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, total, itemsPerPage);
     requestUpdate();
   });
 
@@ -302,7 +346,7 @@ void CoverGridBrowserActivity::loop() {
   });
 
   if (mappedInput.wasReleased(Button::Confirm)) {
-    activityManager.goToReader(books[selectedIndex].path);
+    activateSelected();
     return;
   }
 
@@ -320,21 +364,20 @@ void CoverGridBrowserActivity::loop() {
     const int hit = hitTestCell(tx, ty);
     if (hit >= 0) {
       selectedIndex = hit;
-      activityManager.goToReader(books[selectedIndex].path);
+      activateSelected();
     }
   }
 }
 
 void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const int y, const bool selected) const {
-  const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
-  const int cellIdx = flatIndex - pageStart;
-  const bool haveData = loadedPageStart == pageStart && cellIdx >= 0 && cellIdx < static_cast<int>(pageCells.size());
+  const auto& entries = currentEntries();
+  const bool haveData = flatIndex >= 0 && flatIndex < static_cast<int>(entries.size());
 
   const int innerX = x + CARD_PADDING;
   const int innerY = y + CARD_PADDING;
-  // Same value resolveCell() generated the cached thumbnail at (coverWidth is
-  // computed once in computeGridGeometry() as cellWidth - CARD_PADDING * 2),
-  // so a cache hit needs no rescale in drawBitmap1Bit below.
+  // Same value LibraryGrouping::resolvePage() generated the cached thumbnail at (coverWidth is
+  // computed once in computeGridGeometry() as cellWidth - CARD_PADDING * 2), so a cache hit needs
+  // no rescale in drawBitmap1Bit below.
   const int innerW = coverWidth;
 
   // Blank this cell's full bounds first. drawCell can run without a preceding
@@ -348,18 +391,13 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   bool drewCover = false;
   std::string title;
   if (haveData) {
-    const GridCell& cell = pageCells[cellIdx];
-    title = cell.title;
-    if (cell.hasCover) {
-      // PERF INSTRUMENTATION (temporary): file open+header parse vs. the
-      // row-streamed decode/scale/draw, split out since drawCell re-reads the
-      // BMP from SD on every render, not just once per cover.
-      const uint32_t openStartMs = millis();
+    const auto& entry = entries[flatIndex];
+    title = entry.title;
+    if (entry.hasCover) {
       HalFile file;
-      if (Storage.openFileForRead("CGB", cell.coverThumbPath, file)) {
+      if (Storage.openFileForRead("CGB", entry.coverThumbPath, file)) {
         Bitmap bitmap(file);
         const bool headerOk = bitmap.parseHeaders() == BmpReaderError::Ok;
-        const uint32_t openMs = millis() - openStartMs;
         if (headerOk) {
           // Center the cover in its box: drawBitmap1Bit only ever shrinks (never
           // stretches) to fit maxWidth/maxHeight, binding on whichever dimension
@@ -370,14 +408,7 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
           const int renderedH = static_cast<int>(bitmap.getHeight() * scale);
           const int coverX = innerX + (innerW - renderedW) / 2;
           const int coverY = innerY + (coverHeight - renderedH) / 2;
-          const uint32_t streamStartMs = millis();
           renderer.drawBitmap1Bit(bitmap, coverX, coverY, innerW, coverHeight);
-          LOG_DBG("CGB-PERF",
-                  "drawCell \"%s\": openHeaderMs=%lu cachedPx=%dx%d cellBoxPx=%dx%d rescaled=%d "
-                  "streamDrawMs=%lu",
-                  cell.coverThumbPath.c_str(), static_cast<unsigned long>(openMs), bitmap.getWidth(),
-                  bitmap.getHeight(), innerW, coverHeight, scale < 1.0f,
-                  static_cast<unsigned long>(millis() - streamStartMs));
           drewCover = true;
         }
       }
@@ -385,7 +416,8 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   }
 
   // The outlined/filled card is the no-cover fallback only -- a cell with a real
-  // cover gets no frame around it.
+  // cover gets no frame around it. A series entry with no cover falls back to the exact same
+  // card; the visual stack treatment for series entries is deferred to a later commit.
   if (!drewCover) {
     if (selected) {
       renderer.fillRect(innerX, innerY, innerW, coverHeight);
@@ -410,18 +442,24 @@ void CoverGridBrowserActivity::cellOrigin(const int flatIndex, const int pageSta
   outY = gridTop + (localIdx / cols) * cellHeight;
 }
 
-void CoverGridBrowserActivity::computeHeaderText(const int flatIndex, const int pageStart, std::string& outTitle,
+void CoverGridBrowserActivity::computeHeaderText(const int flatIndex, std::string& outTitle,
                                                  std::string& outSubtitle) const {
   outTitle.clear();
   outSubtitle.clear();
-  const int cellIdx = flatIndex - pageStart;
-  if (loadedPageStart == pageStart && cellIdx >= 0 && cellIdx < static_cast<int>(pageCells.size())) {
-    outTitle = pageCells[cellIdx].title;
+  const auto& entries = currentEntries();
+  if (flatIndex < 0 || flatIndex >= static_cast<int>(entries.size())) {
+    return;
+  }
+  const auto& entry = entries[flatIndex];
+  outTitle = entry.title;
+
+  if (entry.isSeries) {
+    // No single book's reading progress applies to a collapsed multi-book entry.
+    return;
   }
 
-  const std::string& path = books[flatIndex].path;
-  if (FsHelpers::hasEpubExtension(path)) {
-    const Epub epub(path, "/.crosspoint");
+  if (FsHelpers::hasEpubExtension(entry.path)) {
+    const Epub epub(entry.path, "/.crosspoint");
     int spineIndex = 0;
     int pageNumber = 0;
     int pageCount = 0;
@@ -432,11 +470,12 @@ void CoverGridBrowserActivity::computeHeaderText(const int flatIndex, const int 
 }
 
 void CoverGridBrowserActivity::render(RenderLock&&) {
+  const auto& entries = currentEntries();
   // Captured before ensurePageLoaded() runs (which updates loadedPageStart on a
   // page transition): true only when the page the new selection lands on is
   // the same one already composed in the framebuffer.
-  const int pageStart = books.empty() ? -1 : (selectedIndex / itemsPerPage) * itemsPerPage;
-  const bool sameComposedPage = hasComposedPage && !books.empty() && pageStart == loadedPageStart;
+  const int pageStart = entries.empty() ? -1 : (selectedIndex / itemsPerPage) * itemsPerPage;
+  const bool sameComposedPage = hasComposedPage && !entries.empty() && pageStart == loadedPageStart;
 
   // Resolve the current page's metadata/covers BEFORE drawing anything, so the
   // grid is composed once and shown once -- no placeholder pass while
@@ -454,7 +493,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   // No clearScreen, no full grid redraw.
   if (sameComposedPage && lastRenderedIndex != selectedIndex) {
     if (lastRenderedIndex >= pageStart && lastRenderedIndex < pageStart + itemsPerPage &&
-        lastRenderedIndex < static_cast<int>(books.size())) {
+        lastRenderedIndex < static_cast<int>(entries.size())) {
       int oldX, oldY;
       cellOrigin(lastRenderedIndex, pageStart, oldX, oldY);
       drawCell(lastRenderedIndex, oldX, oldY, false);
@@ -465,7 +504,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
 
     std::string headerTitle;
     std::string subtitle;
-    computeHeaderText(selectedIndex, pageStart, headerTitle, subtitle);
+    computeHeaderText(selectedIndex, headerTitle, subtitle);
     // Not every theme's drawHeader clears its own rect first (LyraTheme does;
     // BaseTheme/RoundedRaffTheme draw straight over whatever's already there,
     // relying on the caller's clearScreen()) -- same gap as drawCell had, so
@@ -479,28 +518,24 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
     return;
   }
 
-  // PERF INSTRUMENTATION (temporary): wall time for one full render pass,
-  // cell-draw work through the displayBuffer() call it ends with (1 refresh).
-  const uint32_t renderStartMs = millis();
-
   renderer.clearScreen();
 
   std::string headerTitle;
   std::string subtitle;
-  if (books.empty()) {
+  if (entries.empty()) {
     headerTitle = source == Source::RecentBooks ? tr(STR_NO_RECENT_BOOKS) : tr(STR_NO_BOOKS_FOUND);
   } else {
-    computeHeaderText(selectedIndex, pageStart, headerTitle, subtitle);
+    computeHeaderText(selectedIndex, headerTitle, subtitle);
   }
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                  headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle.empty() ? nullptr : subtitle.c_str());
 
-  if (!books.empty()) {
+  if (!entries.empty()) {
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
         const int flatIndex = pageStart + r * cols + c;
-        if (flatIndex >= static_cast<int>(books.size())) {
+        if (flatIndex >= static_cast<int>(entries.size())) {
           continue;
         }
         drawCell(flatIndex, gridLeft + c * cellWidth, gridTop + r * cellHeight, flatIndex == selectedIndex);
@@ -508,16 +543,15 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
     }
   }
 
-  // Back always returns Home from here (no directory nesting to go up), so the
-  // hint reads "Home" -- same semantics as FileBrowserActivity's root-level Back.
-  // Front Left/Right now move within the row (side Up/Down move by row), so the
-  // hint text is "Left"/"Right", not the "Up"/"Down" stock lists use for the
-  // same physical buttons.
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_OPEN), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  // Back exits a series page (still on this same grid, so the hint reads "Back"); at the top
+  // level it always returns Home (no directory nesting to go up), matching FileBrowserActivity's
+  // root-level Back. Front Left/Right now move within the row (side Up/Down move by row), so the
+  // hint text is "Left"/"Right", not the "Up"/"Down" stock lists use for the same physical
+  // buttons.
+  const auto labels = mappedInput.mapLabels(seriesTopIndex >= 0 ? tr(STR_BACK) : tr(STR_HOME), tr(STR_OPEN),
+                                            tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  LOG_DBG("CGB-PERF", "render page cells drawn in %lums, about to displayBuffer (1 refresh)",
-          static_cast<unsigned long>(millis() - renderStartMs));
   renderer.displayBuffer();
 
   hasComposedPage = true;

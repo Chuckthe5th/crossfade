@@ -343,12 +343,24 @@ void HomeActivity::render(RenderLock&&) {
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void HomeActivity::onFileBrowserOpen() {
+  // Grouping needs every book's series known before the first page can render correctly, so
+  // Covers/Titles route through an index check first when SETTINGS.groupBySeries is on --
+  // near-instant if nothing changed since the last build, a cancellable rebuild otherwise (see
+  // LibraryIndexRebuildActivity). The stock file browser never groups and is unaffected.
   switch (SETTINGS.fileBrowserView) {
     case CrossPointSettings::FILE_BROWSER_COVERS:
-      activityManager.goToCoverGridBrowser();
+      if (SETTINGS.groupBySeries) {
+        activityManager.goToLibraryIndexRebuild([] { activityManager.goToCoverGridBrowser(); });
+      } else {
+        activityManager.goToCoverGridBrowser();
+      }
       break;
     case CrossPointSettings::FILE_BROWSER_TITLES:
-      activityManager.goToLibraryList();
+      if (SETTINGS.groupBySeries) {
+        activityManager.goToLibraryIndexRebuild([] { activityManager.goToLibraryList(); });
+      } else {
+        activityManager.goToLibraryList();
+      }
       break;
     default:
       activityManager.goToFileBrowser();

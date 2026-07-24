@@ -17,6 +17,7 @@
 #include "home/RecentBooksActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
+#include "settings/LibraryIndexRebuildActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
@@ -203,6 +204,10 @@ void ActivityManager::goToCoverGridBrowser() {
 
 void ActivityManager::goToLibraryList() {
   replaceActivity(std::make_unique<LibraryListActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToLibraryIndexRebuild(std::function<void()> onDone) {
+  replaceActivity(std::make_unique<LibraryIndexRebuildActivity>(renderer, mappedInput, std::move(onDone)));
 }
 
 void ActivityManager::goToRecentBooks() {

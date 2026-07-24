@@ -257,6 +257,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_RECENT_BOOKS_VIEW, &CrossPointSettings::recentBooksView,
                           {StrId::STR_FILE_BROWSER_VIEW_LIST, StrId::STR_FILE_BROWSER_VIEW_COVERS}, "recentBooksView",
                           StrId::STR_CAT_SYSTEM),
+        SettingInfo::Toggle(StrId::STR_GROUP_BY_SERIES, &CrossPointSettings::groupBySeries, "groupBySeries",
+                            StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,
                             "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,

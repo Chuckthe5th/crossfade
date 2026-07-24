@@ -1,5 +1,8 @@
 #pragma once
 
+#include <FsHelpers.h>
+
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -42,12 +45,25 @@ struct Entry {
 // paths (the Covers grid, the Titles list) leave this false.
 std::vector<Entry> scanAllBooks(const std::string& root, size_t maxBooks, bool collectFingerprint = false);
 
-// Re-sorts a scanAllBooks() result by filename (FsHelpers::naturalLess, numeric-aware and
+// Basename (path component after the last '/') of a full path -- exposed so LibraryGrouping can
+// sort/group LibraryIndex::Entry (a different type, but the same "has a .path" shape) by the same
+// filename convention without duplicating this extraction.
+inline std::string basenameOf(const std::string& path) {
+  const size_t pos = path.find_last_of('/');
+  return pos == std::string::npos ? path : path.substr(pos + 1);
+}
+
+// Re-sorts a scanAllBooks()-shaped result by filename (FsHelpers::naturalLess, numeric-aware and
 // case-insensitive) instead of the scan's directory tree-walk order. Metadata-free -- filenames are
 // already known, so this costs nothing beyond the comparisons themselves -- unlike sorting by title,
 // which would require resolving every entry's metadata first. Used by both flattened-library views
 // (CoverGridBrowserActivity's Covers grid and LibraryListActivity's Titles list) so toggling between
-// them presents the same library in the same order.
-void sortByFilename(std::vector<Entry>& entries);
+// them presents the same library in the same order. Templated on any T with a `.path` member (not
+// just LibraryScanner::Entry) so LibraryGrouping::Entry can reuse the same sort.
+template <typename T>
+void sortByFilename(std::vector<T>& entries) {
+  std::sort(entries.begin(), entries.end(),
+            [](const T& a, const T& b) { return FsHelpers::naturalLess(basenameOf(a.path), basenameOf(b.path)); });
+}
 
 }  // namespace LibraryScanner

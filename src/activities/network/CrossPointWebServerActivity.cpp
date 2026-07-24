@@ -15,6 +15,7 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/LibraryIndexBuilder.h"
 #include "util/QrUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -94,6 +95,13 @@ void CrossPointWebServerActivity::onExit() {
   state = WebServerActivityState::SHUTTING_DOWN;
   stopDnsServer();
   MDNS.end();
+
+  // Before any restart below (which never returns -- ESP.restart() is immediate, and the reboot
+  // routes through the Silent boot path, which deliberately skips this same check to keep resume
+  // fast): a no-op unless SETTINGS.groupBySeries is on; logs only, never blocks. File Transfer is
+  // the most likely place new books just arrived, so this is worth checking here even though it's
+  // about to reboot anyway.
+  checkLibraryIndexStaleness();
 
   // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
   if (WiFi.getMode() != WIFI_MODE_NULL) {

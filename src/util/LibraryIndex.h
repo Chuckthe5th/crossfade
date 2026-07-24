@@ -16,6 +16,10 @@
 // after a layout change. Covers/Titles resolve cover thumbnails exactly as they do today.
 namespace LibraryIndex {
 
+// Single well-known location, shared by LibraryIndexBuilder, LibraryIndexRebuildActivity, and
+// LibraryGrouping so none of them can drift onto a different path.
+constexpr const char* PATH = "/.crosspoint/library_index.bin";
+
 struct Entry {
   std::string path;
   // Fingerprint captured at the time this entry was last resolved -- see LibraryScanner::Entry

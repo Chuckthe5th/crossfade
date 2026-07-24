@@ -23,19 +23,34 @@ std::string formatSeconds(const uint32_t ms) {
 void LibraryIndexRebuildActivity::onEnter() {
   Activity::onEnter();
 
+  if (isAutoMode()) {
+    // Skip the confirm dialog -- this was triggered by entering a grouped Covers/Titles view
+    // with a stale index, not by the user asking to rebuild something.
+    beginBuild();
+    return;
+  }
+
   state = WARNING;
   const char* options[] = {tr(STR_CANCEL), tr(STR_REBUILD_BUTTON)};
   confirmPopup.show(tr(STR_REBUILD_LIBRARY_INDEX), options, 2, 0, [this](const int idx) {
     if (idx == 1) {
       beginBuild();
     } else {
-      goBack();
+      finishOrContinue();
     }
   });
   requestUpdate();
 }
 
 void LibraryIndexRebuildActivity::onExit() { Activity::onExit(); }
+
+void LibraryIndexRebuildActivity::finishOrContinue() {
+  if (onDone) {
+    onDone();
+  } else {
+    finish();
+  }
+}
 
 void LibraryIndexRebuildActivity::beginBuild() {
   state = BUILDING;
@@ -46,6 +61,14 @@ void LibraryIndexRebuildActivity::beginBuild() {
 
   builder.begin();
   if (builder.upToDate()) {
+    // Up to date costs nothing to detect (see LibraryIndexBuilder::begin()'s comment) -- auto
+    // mode continues immediately rather than showing a screen for the common case where there
+    // was never anything to wait for. Manual mode still shows it: the user explicitly asked to
+    // rebuild and deserves to know nothing needed to happen.
+    if (isAutoMode()) {
+      finishOrContinue();
+      return;
+    }
     state = UP_TO_DATE;
   }
   requestUpdate();
@@ -68,7 +91,7 @@ void LibraryIndexRebuildActivity::loop() {
   if (state == WARNING) {
     if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      goBack();
+      finishOrContinue();
     }
     return;
   }
@@ -81,6 +104,13 @@ void LibraryIndexRebuildActivity::loop() {
     // state was at the last sample, not a one-shot event that resets before the next check.
     if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
       builder.cancel();
+      // Auto mode continues immediately (see beginBuild()'s up-to-date case for the same
+      // reasoning) -- the destination view falls back to ungrouped rendering on its own when no
+      // valid index exists, so there's nothing further this screen needs to communicate.
+      if (isAutoMode()) {
+        finishOrContinue();
+        return;
+      }
       state = CANCELLED;
       requestUpdate();
       return;
@@ -90,17 +120,22 @@ void LibraryIndexRebuildActivity::loop() {
       maybeRequestProgressUpdate();
     } else {
       const bool ok = builder.commit();
+      if (isAutoMode()) {
+        finishOrContinue();
+        return;
+      }
       state = ok ? SUCCESS : FAILED;
       requestUpdate();
     }
     return;
   }
 
-  // UP_TO_DATE, SUCCESS, CANCELLED, FAILED are all terminal: any input dismisses.
+  // UP_TO_DATE, SUCCESS, CANCELLED, FAILED are all terminal (manual mode only -- auto mode never
+  // reaches here, see above): any input dismisses.
   int x = 0;
   int y = 0;
   if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
-    goBack();
+    finishOrContinue();
   }
 }
 
@@ -114,9 +149,10 @@ void LibraryIndexRebuildActivity::render(RenderLock&&) {
     // fillPopupProgress below), matching CoverGridBrowserActivity::ensurePageLoaded()'s
     // throttled-popup convention -- not a full-page redraw per progress step.
     if (!popupShown) {
+      // No page header here (unlike every other state below): this can be auto-triggered while
+      // entering Covers/Titles, and "Rebuild Library Index" as a page title would look like a
+      // navigation mistake in that context. The popup text alone explains what's happening.
       renderer.clearScreen();
-      GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                     tr(STR_REBUILD_LIBRARY_INDEX));
       popupRect = GUI.drawPopup(renderer, tr(STR_BUILDING_LIBRARY_INDEX));
       popupShown = true;
       // Drawn once here, not per progress tick -- matches the header above, and the hint text

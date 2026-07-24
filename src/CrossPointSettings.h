@@ -270,6 +270,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Recent books view: flat list (stock) or a paginated cover grid. Defaults to
   // list so existing users see no change until they opt in.
   uint8_t recentBooksView = RECENT_BOOKS_LIST;
+  // Collapse books sharing a series into one entry in Browse Books' Covers/Titles views (0 = off,
+  // 1 = on). Does not affect the stock file browser or Recent Books. Default off.
+  uint8_t groupBySeries = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)

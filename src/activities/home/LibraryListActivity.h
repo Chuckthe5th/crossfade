@@ -5,46 +5,64 @@
 
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
-#include "util/LibraryScanner.h"
+#include "util/LibraryGrouping.h"
 
 // Third fileBrowserView option alongside the stock FileBrowserActivity (Files) and
 // CoverGridBrowserActivity (Covers): a flat, paginated title+author list over the whole library,
 // using the same row presentation RecentBooksActivity already draws via GUI.drawList. Reached from
 // HomeActivity::onFileBrowserOpen() -- see ActivityManager::goToLibraryList().
 //
-// Like CoverGridBrowserActivity's Library source, this flattens the whole SD card (LibraryScanner)
-// rather than preserving folder navigation -- a title+author row has nothing useful to show for a
-// folder. Unlike the grid, entries are sorted by filename after the scan (cheap: no metadata needed,
-// and a title list is browsed alphabetically) rather than left in scan order.
+// Like CoverGridBrowserActivity's Library source, this flattens the whole SD card rather than
+// preserving folder navigation -- a title+author row has nothing useful to show for a folder.
+//
+// Series grouping (SETTINGS.groupBySeries): when a group of entries collapses into a series (see
+// LibraryGrouping), selecting it drills into a second-level page listing that series' books in
+// index order -- title as headline, author as subtitle, exactly like any other row, rendered with
+// the same GUI.drawList call. currentEntries() is the only thing that differs between the
+// top-level page and a series page.
 class LibraryListActivity final : public Activity {
  private:
-  struct RowCache {
-    std::string title;
-    std::string author;
-  };
-
   ButtonNavigator buttonNavigator;
 
-  std::vector<LibraryScanner::Entry> books;
+  std::vector<LibraryGrouping::Entry> topLevelEntries;
   int selectedIndex = 0;
+  // >= 0 while viewing a series page: the index into topLevelEntries of the series being viewed.
+  // -1 at the top level.
+  int seriesTopIndex = -1;
+  // selectedIndex at the top level, saved when drilling into a series and restored on Back out of
+  // it.
+  int savedTopLevelSelectedIndex = 0;
 
-  // Metadata for only the currently visible page, resolved lazily (see ensurePageLoaded) --
-  // mirrors CoverGridBrowserActivity's pageCells/loadedPageStart pattern so a selection move within
-  // an already-resolved page, or returning to a previously visited page, costs zero extra SD I/O.
-  std::vector<RowCache> pageRows;
+  // Which page ensurePageLoaded() last resolved -- lets a selection move within an already-
+  // resolved page, or a return to a previously visited page, skip re-resolving. Always trivially
+  // satisfied in grouped mode: every entry's text is already known from the index.
   int loadedPageStart = -1;
 
-  // Library scan sorted by filename, most-recent-first initial selection.
+  std::vector<LibraryGrouping::Entry>& currentEntries();
+  const std::vector<LibraryGrouping::Entry>& currentEntries() const;
+  int currentCount() const { return static_cast<int>(currentEntries().size()); }
+
+  // Library scan (or, when SETTINGS.groupBySeries is on and a valid index exists, the collapsed
+  // index) sorted by filename.
   void loadBooks();
   // Resolves the current page's title/author synchronously (called at the top of render(), before
-  // anything is drawn) via the shared BookMetadataResolver, with no cover box requested -- unlike
-  // the grid, this never generates or reads a thumbnail.
+  // anything is drawn) via the shared LibraryGrouping::resolvePage, with no cover box requested --
+  // unlike the grid, this never generates or reads a thumbnail. A no-op in grouped mode (every
+  // entry's text is already known from the index).
   void ensurePageLoaded(int itemsPerPage);
-  std::string rowTitle(int index, int itemsPerPage) const;
-  std::string rowAuthor(int index, int itemsPerPage) const;
-  // Header title + page-position subtitle for the given book, mirroring
-  // CoverGridBrowserActivity::computeHeaderText.
-  void computeHeaderText(int index, int itemsPerPage, std::string& outTitle, std::string& outSubtitle) const;
+  std::string rowTitle(int index) const;
+  std::string rowAuthor(int index) const;
+  // Header title + page-position subtitle. A series entry (only reachable at the top level) shows
+  // its name with no subtitle; an individual book (standalone or drilled-in member) shows its
+  // title and chapter-progress subtitle.
+  void computeHeaderText(int index, std::string& outTitle, std::string& outSubtitle) const;
+
+  void enterSeries(int topLevelIndex);
+  void exitSeries();
+  void activateSelected();
+  // Two-level last-read search -- see CoverGridBrowserActivity::selectLastRead for the reasoning;
+  // identical here since both views share LibraryGrouping's collapsed shape.
+  void selectLastRead();
 
  public:
   explicit LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

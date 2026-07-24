@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -86,6 +87,13 @@ class ActivityManager {
   void goToFileBrowser(std::string path = {});
   void goToCoverGridBrowser();
   void goToLibraryList();
+  // Auto-triggered library index rebuild: no confirm dialog, starts straight into building, and
+  // calls `onDone` on any terminal outcome (success/up-to-date/cancelled/failed) instead of
+  // returning to a caller on the activity stack -- used when entering a grouped Covers/Titles
+  // view with a possibly-stale index (see HomeActivity::onFileBrowserOpen()). The manual
+  // Settings > System > Rebuild Library Index action does not use this -- it starts
+  // LibraryIndexRebuildActivity directly via startActivityForResult instead.
+  void goToLibraryIndexRebuild(std::function<void()> onDone);
   void goToRecentBooks();
   void goToCoverGridRecentBooks();
   void goToBrowser();
