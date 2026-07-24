@@ -196,7 +196,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
-  const bool isQuickResumeSleep = SETTINGS.isQuickResumeSleep(fromTimeout);
+  const bool isQuickResumeSleep = SETTINGS.isQuickResumeSleep(fromTimeout, APP_STATE.lastSleepFromReader);
   APP_STATE.showBootScreen = !isQuickResumeSleep;
 
   APP_STATE.saveToFile();

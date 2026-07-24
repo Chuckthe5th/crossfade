@@ -365,7 +365,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // moon icon) path instead of the configured static sleepScreen. Shared by
   // main.cpp::enterDeepSleep() (whether to save the framebuffer) and SleepActivity::onEnter()
   // (what to render), so the two decisions can never drift out of sync.
-  bool isQuickResumeSleep(bool fromTimeout) const;
+  //
+  // isReaderActivity gates the whole decision: quick-resume's premise is resuming a reading
+  // position, so it's meaningless (and, on wake, actively wasteful -- a saved frame that gets
+  // thrown away and repainted over) when sleep wasn't entered from the reader, regardless of
+  // sleepScreen/quickResumeSleepScreen or how sleep was triggered. Callers pass this rather than
+  // the method querying it itself: main.cpp has a live ActivityManager to ask, while
+  // SleepActivity runs after the reader activity has already been replaced by this one, so it
+  // must use the APP_STATE.lastSleepFromReader flag captured at sleep-entry time instead.
+  bool isQuickResumeSleep(bool fromTimeout, bool isReaderActivity) const;
 };
 
 // Helper macro to access settings

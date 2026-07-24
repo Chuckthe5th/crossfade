@@ -20,7 +20,7 @@
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
-  const bool renderQuickResume = SETTINGS.isQuickResumeSleep(fromTimeout);
+  const bool renderQuickResume = SETTINGS.isQuickResumeSleep(fromTimeout, APP_STATE.lastSleepFromReader);
 
   if (renderQuickResume) {
     return renderLastScreenSleepScreen();
