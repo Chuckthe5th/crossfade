@@ -361,6 +361,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+  // True if a sleep entered right now should render/restore via the quick-resume ("last screen" +
+  // moon icon) path instead of the configured static sleepScreen. Shared by
+  // main.cpp::enterDeepSleep() (whether to save the framebuffer) and SleepActivity::onEnter()
+  // (what to render), so the two decisions can never drift out of sync.
+  bool isQuickResumeSleep(bool fromTimeout) const;
 };
 
 // Helper macro to access settings

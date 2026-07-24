@@ -20,10 +20,7 @@
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
-  const bool renderQuickResume =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
-       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
+  const bool renderQuickResume = SETTINGS.isQuickResumeSleep(fromTimeout);
 
   if (renderQuickResume) {
     return renderLastScreenSleepScreen();
