@@ -6,6 +6,7 @@
 #include <XmlParserUtils.h>
 
 #include <cctype>
+#include <cstdlib>
 
 #include "Epub/BookMetadataCache.h"
 
@@ -14,6 +15,17 @@ constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
 constexpr char MEDIA_TYPE_IMAGE_PREFIX[] = "image/";
 constexpr char itemCacheFile[] = "/.items.bin";
+
+// Parses a decimal series index, tolerating fractional values (e.g. "1.5" for a novella).
+// Returns -1.0f (the "no index" sentinel) if the text isn't a valid number.
+float parseSeriesIndex(const std::string& text) {
+  if (text.empty()) {
+    return -1.0f;
+  }
+  char* end = nullptr;
+  const float value = strtof(text.c_str(), &end);
+  return (end != text.c_str()) ? value : -1.0f;
+}
 
 bool startsWithImageMediaType(const std::string& mediaType) {
   constexpr size_t prefixLen = sizeof(MEDIA_TYPE_IMAGE_PREFIX) - 1;
@@ -91,6 +103,16 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
   return size;
 }
 
+ContentOpfParser::CollectionInfo& ContentOpfParser::findOrCreateCollection(const std::string& id) {
+  for (auto& entry : collections) {
+    if (entry.first == id) {
+      return entry.second;
+    }
+  }
+  collections.emplace_back(id, CollectionInfo{});
+  return collections.back().second;
+}
+
 void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ContentOpfParser*>(userData);
   (void)atts;
@@ -162,18 +184,52 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
   if (self->state == IN_METADATA && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
     bool isCover = false;
-    std::string coverItemId;
+    std::string metaName;
+    std::string content;
+    std::string property;
+    std::string id;
+    std::string refines;
 
     for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "name") == 0 && strcmp(atts[i + 1], "cover") == 0) {
-        isCover = true;
+      if (strcmp(atts[i], "name") == 0) {
+        metaName = atts[i + 1];
+        if (metaName == "cover") {
+          isCover = true;
+        }
       } else if (strcmp(atts[i], "content") == 0) {
-        coverItemId = atts[i + 1];
+        content = atts[i + 1];
+      } else if (strcmp(atts[i], "property") == 0) {
+        property = atts[i + 1];
+      } else if (strcmp(atts[i], "id") == 0) {
+        id = atts[i + 1];
+      } else if (strcmp(atts[i], "refines") == 0) {
+        // '#id' -> id, matching how idref/hrefs are dereferenced elsewhere in this parser.
+        refines = (atts[i + 1][0] == '#') ? atts[i + 1] + 1 : atts[i + 1];
       }
     }
 
     if (isCover) {
-      self->coverItemId = coverItemId;
+      self->coverItemId = content;
+    }
+
+    // calibre:series / calibre:series_index: attribute-only, resolved immediately, no character
+    // data to wait for. Takes priority over any EPUB3 collection found below (see </metadata>).
+    if (metaName == "calibre:series" && self->series.empty()) {
+      self->series = content;
+    } else if (metaName == "calibre:series_index") {
+      self->seriesIndex = parseSeriesIndex(content);
+    }
+
+    // EPUB3 belongs-to-collection / collection-type / group-position: the actual value is
+    // character data between the tags, not an attribute, so capture it via IN_META_TEXT and
+    // dispatch on close. Only meta elements with a `property` attribute use this path; calibre's
+    // (and any other purely attribute-based meta) are already fully handled above.
+    if (!property.empty()) {
+      self->pendingMetaProperty = property;
+      self->pendingMetaId = id;
+      self->pendingMetaRefines = refines;
+      self->pendingMetaText.clear();
+      self->state = IN_META_TEXT;
     }
     return;
   }
@@ -352,6 +408,11 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     self->language.append(s, len);
     return;
   }
+
+  if (self->state == IN_META_TEXT) {
+    self->pendingMetaText.append(s, len);
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -391,7 +452,33 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     return;
   }
 
+  if (self->state == IN_META_TEXT && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
+    if (self->pendingMetaProperty == "belongs-to-collection" && !self->pendingMetaId.empty()) {
+      self->findOrCreateCollection(self->pendingMetaId).name = self->pendingMetaText;
+    } else if (self->pendingMetaProperty == "collection-type" && !self->pendingMetaRefines.empty()) {
+      self->findOrCreateCollection(self->pendingMetaRefines).isSeries = (self->pendingMetaText == "series");
+    } else if (self->pendingMetaProperty == "group-position" && !self->pendingMetaRefines.empty()) {
+      self->findOrCreateCollection(self->pendingMetaRefines).position = parseSeriesIndex(self->pendingMetaText);
+    }
+    // Other `property=` meta (e.g. dcterms:modified) are captured then discarded here -- not
+    // one of the three we track.
+    self->state = IN_METADATA;
+    return;
+  }
+
   if (self->state == IN_METADATA && (strcmp(name, "metadata") == 0 || strcmp(name, "opf:metadata") == 0)) {
+    // EPUB3 collection fallback: only consulted if calibre:series never set series (calibre
+    // always wins). First collection whose type resolved to "series" (explicit or the EPUB3
+    // default for an unrefined collection) with a non-empty name.
+    if (self->series.empty()) {
+      for (const auto& entry : self->collections) {
+        if (entry.second.isSeries && !entry.second.name.empty()) {
+          self->series = entry.second.name;
+          self->seriesIndex = entry.second.position;
+          break;
+        }
+      }
+    }
     self->state = IN_PACKAGE;
     return;
   }

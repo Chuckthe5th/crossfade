@@ -80,6 +80,8 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.author = opfParser.author;
   bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
+  bookMetadata.series = opfParser.series;
+  bookMetadata.seriesIndex = opfParser.seriesIndex;
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
@@ -561,6 +563,23 @@ const std::string& Epub::getAuthor() const {
   }
 
   return bookMetadataCache->coreMetadata.author;
+}
+
+const std::string& Epub::getSeries() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+
+  return bookMetadataCache->coreMetadata.series;
+}
+
+float Epub::getSeriesIndex() const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return -1.0f;
+  }
+
+  return bookMetadataCache->coreMetadata.seriesIndex;
 }
 
 const std::string& Epub::getLanguage() const {

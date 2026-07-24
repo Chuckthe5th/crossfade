@@ -62,6 +62,11 @@ class Epub {
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
+  // Series name (empty if the book has no series metadata) and index (-1.0f if no index was
+  // given). Sourced from calibre:series/calibre:series_index if present, else an EPUB3
+  // belongs-to-collection entry -- see ContentOpfParser.
+  const std::string& getSeries() const;
+  float getSeriesIndex() const;
   std::string getCoverBmpPath(bool cropped = false) const;
   bool generateCoverBmp(bool cropped = false) const;
   std::string getThumbBmpPath() const;

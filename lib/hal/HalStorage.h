@@ -90,6 +90,14 @@ class HalFile : public Print {
   bool rename(const char* newPath);
   bool isDirectory() const;
   void rewindDirectory();
+  // Packed FAT date/time of this entry's last modification (FS_DATE/FS_TIME encoding, 2-second
+  // resolution). Reads a field already present in the directory entry cached by open()/
+  // openNextFile() -- no extra SD transaction in the common case of querying it right after
+  // enumerating the entry. Returns false if the file isn't open. Note: this firmware never
+  // registers an SdFat date/time callback (no RTC/NTP wiring to FsDateTime::setCallback), so any
+  // file this firmware itself writes (File Transfer uploads, OPDS downloads) gets the FAT default
+  // (packed 0) rather than a real timestamp -- only files copied on via a PC get a meaningful one.
+  bool getModifyTime(uint16_t& fatDate, uint16_t& fatTime) const;
   bool close();
   HalFile openNextFile();
   bool isOpen() const;

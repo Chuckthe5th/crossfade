@@ -6,10 +6,12 @@ All POD fields are written in the ESP32 little-endian representation used by
 
 ## `book.bin`
 
-### Version 7
+### Version 9
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
-The current firmware writes this version from `BookMetadataCache`.
+The current firmware writes this version from `BookMetadataCache`. (v9 added
+`series`/`seriesIndex`, sourced from calibre:series/calibre:series_index or,
+if absent, an EPUB3 belongs-to-collection entry -- see `ContentOpfParser`.)
 
 ImHex pattern:
 
@@ -18,7 +20,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 7
+#define EXPECTED_VERSION 9
 #define MAX_STRING_LENGTH 65535
 
 struct String {
@@ -39,6 +41,8 @@ struct Metadata {
     String language [[comment("Book language code")]];
     String coverItemHref [[comment("Path to cover image")]];
     String textReferenceHref [[comment("Path to guided first text reference")]];
+    String series [[comment("Series name, empty if none")]];
+    float seriesIndex [[comment("Series index, -1.0 if none given")]];
 };
 
 struct SpineEntry {
@@ -317,6 +321,80 @@ struct SectionBin {
 };
 
 SectionBin section @ 0x00;
+
+u32 fileSize = std::mem::size();
+u32 parsedSize = $;
+if (parsedSize != fileSize) {
+    std::warning(std::format("Unparsed data detected: {} bytes remaining at offset 0x{:X}", fileSize - parsedSize, parsedSize));
+}
+```
+
+## `library_index.bin`
+
+### Version 1
+
+Lives at `/.crosspoint/library_index.bin` (not per-book, unlike the caches
+above -- one file for the whole library). Caches resolved title/author/series
+metadata per book, delta-rebuilt (see `LibraryIndexBuilder`) so a page turn in
+the Covers/Titles views doesn't need to re-parse a book's OPF/XTC header, and
+grouping by series doesn't need every book resolved before the first paint.
+
+Each entry's `size`/`fatDateTime` is the fingerprint captured during the same
+directory walk that found it (see `LibraryScanner::Entry`) -- compared against
+a fresh scan on the next delta rebuild to decide which paths need re-parsing.
+Written via a temp file + rename (`library_index.bin.tmp` -> `library_index.bin`),
+never in place, so a power loss mid-write can't leave a half-written index; a
+version mismatch or any read/size-sanity failure is treated as "no index" and
+triggers a full rebuild rather than a partial load.
+
+Deliberately does NOT cache a cover thumbnail path -- that cache is already
+separate, keyed by its own exact (width, height) box, which can differ by
+orientation or theme (see `BookMetadataResolver`).
+
+ImHex pattern:
+
+```c++
+import std.mem;
+import std.string;
+import std.core;
+
+#define EXPECTED_VERSION 1
+#define MAX_STRING_LENGTH 65535
+
+struct String {
+    u32 length [[hidden, comment("String byte length")]];
+    if (length > MAX_STRING_LENGTH) {
+        std::warning(std::format("Unusually large string length: {} bytes", length));
+    }
+    char data[length] [[comment("UTF-8 string data")]];
+} [[sealed, format("format_string"), comment("Length-prefixed UTF-8 string")]];
+
+fn format_string(String s) {
+    return s.data;
+};
+
+struct IndexEntry {
+    String path [[comment("Full path on the SD card")]];
+    u32 size [[comment("Fingerprint: byte size at last resolve")]];
+    u32 fatDateTime [[comment("Fingerprint: packed FAT (date << 16 | time), 0 if never set")]];
+    String title;
+    String author;
+    String series [[comment("Empty if the book has no series metadata")]];
+    float seriesIndex [[comment("-1.0 if no index was given")]];
+};
+
+struct LibraryIndexBin {
+    u8 version;
+    if (version != EXPECTED_VERSION) {
+        std::error(std::format("Unsupported version: {} (expected {})", version, EXPECTED_VERSION));
+    }
+
+    u32 lastBuildDurationMs [[comment("Wall time of the build that produced this file")]];
+    u32 entryCount;
+    IndexEntry entries[entryCount];
+};
+
+LibraryIndexBin index @ 0x00;
 
 u32 fileSize = std::mem::size();
 u32 parsedSize = $;

@@ -25,9 +25,20 @@ std::string basename(const std::string& path) {
   const size_t pos = path.find_last_of('/');
   return pos == std::string::npos ? path : path.substr(pos + 1);
 }
+
+// Carries a book file's fingerprint alongside its name through the same sort sortFileList would
+// apply to a plain name list -- sortFileList itself only accepts vector<string>, and for a
+// directory's book files specifically (never containing a '/'-suffixed directory entry) its
+// "directories first" branch never fires, so a direct naturalLess sort is equivalent.
+struct BookFileInfo {
+  std::string name;
+  uint32_t size = 0;
+  uint32_t fatDateTime = 0;
+};
 }  // namespace
 
-std::vector<LibraryScanner::Entry> LibraryScanner::scanAllBooks(const std::string& root, const size_t maxBooks) {
+std::vector<LibraryScanner::Entry> LibraryScanner::scanAllBooks(const std::string& root, const size_t maxBooks,
+                                                                const bool collectFingerprint) {
   std::vector<Entry> result;
   if (maxBooks == 0) {
     return result;
@@ -57,7 +68,7 @@ std::vector<LibraryScanner::Entry> LibraryScanner::scanAllBooks(const std::strin
     dir.rewindDirectory();
 
     std::vector<std::string> subDirs;
-    std::vector<std::string> bookFiles;
+    std::vector<BookFileInfo> bookFiles;
     for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
       file.getName(nameBuffer.get(), NAME_BUFFER_SIZE);
       if ((!SETTINGS.showHiddenFiles && nameBuffer[0] == '.') ||
@@ -67,20 +78,31 @@ std::vector<LibraryScanner::Entry> LibraryScanner::scanAllBooks(const std::strin
       if (file.isDirectory()) {
         subDirs.emplace_back(nameBuffer.get());
       } else if (isBookFile(nameBuffer.get())) {
-        bookFiles.emplace_back(nameBuffer.get());
+        BookFileInfo info;
+        info.name = nameBuffer.get();
+        if (collectFingerprint) {
+          info.size = static_cast<uint32_t>(file.fileSize());
+          uint16_t fatDate = 0;
+          uint16_t fatTime = 0;
+          if (file.getModifyTime(fatDate, fatTime)) {
+            info.fatDateTime = (static_cast<uint32_t>(fatDate) << 16) | fatTime;
+          }
+        }
+        bookFiles.push_back(std::move(info));
       }
     }
     dir.close();
 
-    FsHelpers::sortFileList(bookFiles);
+    std::sort(bookFiles.begin(), bookFiles.end(),
+              [](const BookFileInfo& a, const BookFileInfo& b) { return FsHelpers::naturalLess(a.name, b.name); });
     FsHelpers::sortFileList(subDirs);
 
-    for (const auto& name : bookFiles) {
+    for (const auto& info : bookFiles) {
       if (result.size() >= maxBooks) {
         truncated = true;
         break;
       }
-      result.push_back(Entry{joinPath(dirPath, name)});
+      result.push_back(Entry{joinPath(dirPath, info.name), info.size, info.fatDateTime});
     }
 
     // Push in reverse so the worklist (a LIFO stack) still visits subfolders in

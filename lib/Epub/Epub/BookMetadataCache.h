@@ -16,6 +16,8 @@ class BookMetadataCache {
     std::string language;
     std::string coverItemHref;
     std::string textReferenceHref;
+    std::string series;         // empty if the book has no series metadata
+    float seriesIndex = -1.0f;  // -1 = no index given
   };
 
   struct SpineEntry {

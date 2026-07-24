@@ -43,6 +43,8 @@ Result resolve(const std::string& path, const int coverWidth, const int coverHei
     if (haveMetadata) {
       result.title = epub.getTitle();
       result.author = epub.getAuthor();
+      result.series = epub.getSeries();
+      result.seriesIndex = epub.getSeriesIndex();
       if (wantCover) {
         const std::string thumbPath = epub.getThumbBmpPath(coverWidth, coverHeight);
         const bool thumbCached = Storage.exists(thumbPath.c_str());
