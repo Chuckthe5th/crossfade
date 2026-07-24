@@ -416,14 +416,18 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   }
 
   // The outlined/filled card is the no-cover fallback only -- a cell with a real
-  // cover gets no frame around it. A series entry with no cover falls back to the exact same
-  // card; the visual stack treatment for series entries is deferred to a later commit.
+  // cover gets no frame around it. A series entry with no cover falls back to the exact same card,
+  // with the stack overlay layered on top of it identically to the real-cover case below.
   if (!drewCover) {
     if (selected) {
       renderer.fillRect(innerX, innerY, innerW, coverHeight);
     } else {
       renderer.drawRect(innerX, innerY, innerW, coverHeight);
     }
+  }
+
+  if (haveData && entries[flatIndex].isSeries) {
+    drawStackOverlay(innerX, innerY, innerW);
   }
 
   if (!title.empty()) {
@@ -433,6 +437,33 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
 
   if (selected) {
     renderer.drawRect(innerX - 2, innerY - 2, innerW + 4, coverHeight + 4, 2, true);
+  }
+}
+
+void CoverGridBrowserActivity::drawStackOverlay(const int coverX, const int coverY, const int coverW) const {
+  // Two short strokes near the top-right corner, evoking books stacked behind the front cover.
+  // An inset overlay drawn on top of whatever's already in the box (real cover art or the
+  // no-cover fallback card) -- not a reserved layout strip, so cell/cache geometry never changes.
+  // Each stroke gets its own 1px white halo drawn first (rather than relying on an already-blank
+  // background, the way the selection ring below does) since real cover art under it isn't
+  // guaranteed to be light.
+  constexpr int strokeWidth = 2;
+  constexpr int strokeHeight = 14;
+  constexpr int haloPad = 1;
+  const int rightEdge = coverX + coverW;
+
+  struct Stroke {
+    int insetFromRight;
+    int insetFromTop;
+  };
+  constexpr Stroke strokes[] = {{4, 6}, {8, 10}};
+
+  for (const auto& stroke : strokes) {
+    const int strokeX = rightEdge - stroke.insetFromRight - strokeWidth;
+    const int strokeY = coverY + stroke.insetFromTop;
+    renderer.fillRect(strokeX - haloPad, strokeY - haloPad, strokeWidth + haloPad * 2, strokeHeight + haloPad * 2,
+                      false);
+    renderer.fillRect(strokeX, strokeY, strokeWidth, strokeHeight, true);
   }
 }
 

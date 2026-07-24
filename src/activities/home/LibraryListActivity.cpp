@@ -268,7 +268,13 @@ void LibraryListActivity::render(RenderLock&&) {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(entries.size()), selectedIndex,
         [this](int index) { return rowTitle(index); }, [this](int index) { return rowAuthor(index); },
-        [this](int index) { return UITheme::getFileIcon(currentEntries()[index].path); });
+        [this](int index) {
+          const auto& entry = currentEntries()[index];
+          // Reuses the codebase's existing "this row navigates into a container, not a leaf item"
+          // signal -- the Folder icon FileBrowserActivity shows for directories -- rather than
+          // inventing a second visual language (chevron, count, prefix glyph) for the same idea.
+          return entry.isSeries ? UIIcon::Folder : UITheme::getFileIcon(entry.path);
+        });
   }
 
   const auto labels = mappedInput.mapLabels(seriesTopIndex >= 0 ? tr(STR_BACK) : tr(STR_HOME), tr(STR_OPEN),
