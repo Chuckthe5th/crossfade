@@ -7,7 +7,6 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <Xtc.h>
 
 #include <algorithm>
 
@@ -16,6 +15,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookMetadataResolver.h"
 
 namespace {
 // Target cell size grid columns/rows are derived from at runtime -- never a
@@ -32,16 +32,6 @@ constexpr size_t MAX_GRID_BOOKS = 2000;
 // Matches ButtonNavigator's own continuous-hold repeat interval -- a familiar
 // "still working" cadence -- rather than refreshing the panel once per cell.
 constexpr uint32_t PROGRESS_UPDATE_INTERVAL_MS = 500;
-
-std::string filenameWithoutExtension(const std::string& path) {
-  size_t start = path.find_last_of('/');
-  start = (start == std::string::npos) ? 0 : start + 1;
-  size_t end = path.find_last_of('.');
-  if (end == std::string::npos || end < start) {
-    end = path.size();
-  }
-  return path.substr(start, end - start);
-}
 
 // Mirrors GfxRenderer::drawBitmap1Bit's own fit-within-box scale calculation
 // (shrink-only, bound by whichever dimension needs it more) so the caller can
@@ -102,85 +92,15 @@ void CoverGridBrowserActivity::loadBooks() {
   books = LibraryScanner::scanAllBooks("/", MAX_GRID_BOOKS);
 }
 
-// PERF INSTRUMENTATION (temporary -- diagnosing slow page turns, not yet wired
-// to any behavior change). Logs at LOG_DBG so it's silent in release builds
-// (LOG_LEVEL=0) and visible on `default` (LOG_LEVEL=2) / serial monitor.
+// Thin wrapper over the shared resolver (also used by LibraryListActivity for the text-only List
+// view): asks for a cover in this grid's exact cell box, so a cache hit needs no rescale in
+// drawCell's drawBitmap1Bit call below.
 bool CoverGridBrowserActivity::resolveCell(const std::string& path, GridCell& cell) const {
-  const uint32_t cellStartMs = millis();
-  cell.title.clear();
-  cell.coverThumbPath.clear();
-  cell.hasCover = false;
-  bool generated = false;
-
-  if (FsHelpers::hasEpubExtension(path)) {
-    const uint32_t metaStartMs = millis();
-    Epub epub(path, "/.crosspoint");
-    bool haveMetadata = epub.load(/*buildIfMissing=*/false, /*skipLoadingCss=*/true);
-    const bool wasCachedBook = haveMetadata;
-    if (!haveMetadata) {
-      // Never opened before: no book.bin yet. A full build (spine + TOC) would be
-      // too expensive to pay per book just to populate a grid tile, so fall back
-      // to a lightweight OPF-only parse (title/author/cover href, no spine/TOC).
-      epub.setupCacheDir();
-      haveMetadata = epub.loadMetadataOnly();
-    }
-    const uint32_t metaMs = millis() - metaStartMs;
-    if (haveMetadata) {
-      cell.title = epub.getTitle();
-      const std::string thumbPath = epub.getThumbBmpPath(coverWidth, coverHeight);
-      const bool thumbCached = Storage.exists(thumbPath.c_str());
-      uint32_t genMs = 0;
-      if (!thumbCached) {
-        const uint32_t genStartMs = millis();
-        epub.generateThumbBmp(coverWidth, coverHeight);
-        genMs = millis() - genStartMs;
-        generated = true;
-      }
-      if (Storage.exists(thumbPath.c_str())) {
-        cell.coverThumbPath = thumbPath;
-        cell.hasCover = true;
-      }
-      LOG_DBG("CGB-PERF",
-              "resolveCell EPUB \"%s\": bookBinCached=%d metadataResolveMs=%lu thumbCached=%d "
-              "decodeScaleWriteMs=%lu totalMs=%lu",
-              path.c_str(), wasCachedBook, static_cast<unsigned long>(metaMs), thumbCached,
-              static_cast<unsigned long>(genMs), static_cast<unsigned long>(millis() - cellStartMs));
-    } else {
-      LOG_DBG("CGB-PERF", "resolveCell EPUB \"%s\": metadata FAILED, metadataResolveMs=%lu totalMs=%lu", path.c_str(),
-              static_cast<unsigned long>(metaMs), static_cast<unsigned long>(millis() - cellStartMs));
-    }
-  } else if (FsHelpers::hasXtcExtension(path)) {
-    const uint32_t loadStartMs = millis();
-    Xtc xtc(path, "/.crosspoint");
-    const bool loaded = xtc.load();
-    const uint32_t loadMs = millis() - loadStartMs;
-    if (loaded) {
-      cell.title = xtc.getTitle();
-      const std::string thumbPath = xtc.getThumbBmpPath(coverWidth, coverHeight);
-      const bool thumbCached = Storage.exists(thumbPath.c_str());
-      uint32_t genMs = 0;
-      if (!thumbCached) {
-        const uint32_t genStartMs = millis();
-        xtc.setupCacheDir();
-        xtc.generateThumbBmp(coverWidth, coverHeight);
-        genMs = millis() - genStartMs;
-        generated = true;
-      }
-      if (Storage.exists(thumbPath.c_str())) {
-        cell.coverThumbPath = thumbPath;
-        cell.hasCover = true;
-      }
-      LOG_DBG("CGB-PERF", "resolveCell XTC \"%s\": headerLoadMs=%lu thumbCached=%d decodeScaleWriteMs=%lu totalMs=%lu",
-              path.c_str(), static_cast<unsigned long>(loadMs), thumbCached, static_cast<unsigned long>(genMs),
-              static_cast<unsigned long>(millis() - cellStartMs));
-    }
-  }
-  // TXT/MD have no cover concept -- title-only fallback card below, no file open.
-
-  if (cell.title.empty()) {
-    cell.title = filenameWithoutExtension(path);
-  }
-  return generated;
+  const BookMetadataResolver::Result result = BookMetadataResolver::resolve(path, coverWidth, coverHeight);
+  cell.title = result.title;
+  cell.coverThumbPath = result.coverThumbPath;
+  cell.hasCover = result.hasCover;
+  return result.coverGenerated;
 }
 
 void CoverGridBrowserActivity::ensurePageLoaded() {
