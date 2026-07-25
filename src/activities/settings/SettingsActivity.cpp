@@ -87,10 +87,15 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_REBUILD_LIBRARY_INDEX, SettingAction::RebuildLibraryIndex));
-  // TODO: Touch devices need their own firmware update path/artifacts before OTA is exposed.
-  if (!BoardConfig::hasTouch()) {
-    systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
-  }
+  // "Check for Updates" is withheld entirely for this fork: OtaUpdater still points at upstream's
+  // GitHub releases (crosspoint-reader/crosspoint-reader) -- see the TODO in OtaUpdater.cpp. A
+  // public fork must not offer users updates to upstream firmware, and hiding the entry avoids
+  // both a dead-end "up to date" lie (nothing was actually checked) and an error screen for a
+  // feature that isn't really broken, just not pointed anywhere yet.
+  // TODO: Restore `if (!BoardConfig::hasTouch()) systemSettings.push_back(SettingInfo::Action(
+  // StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));` once this fork has its own
+  // releases URL (see OtaUpdater.cpp) -- touch devices will additionally need their own firmware
+  // update path/artifacts before OTA is exposed there too.
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   readerSettings.insert(readerSettings.begin(),

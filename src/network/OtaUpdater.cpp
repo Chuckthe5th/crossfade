@@ -14,6 +14,12 @@
 #include <string>
 
 namespace {
+// TODO: still points at upstream CrossPoint's releases -- a public fork must not offer users
+// updates to upstream firmware. The "Check for Updates" menu entry that reaches this is withheld
+// entirely for now (see SettingsActivity::rebuildSettingsLists()), so checkForUpdate() below is
+// currently unreachable in practice; this URL is left correct-but-inert rather than rewritten to
+// something invalid, so re-enabling is just restoring that one menu entry once CrossFade has its
+// own releases URL to point here instead.
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
 }  // namespace
 
