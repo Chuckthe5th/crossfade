@@ -30,6 +30,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "PinnedBookStore.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
@@ -143,6 +144,7 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
   // location instead of dropping it. updatePath persists on success.
   RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
   FINISHED_BOOKS.updatePath(srcPath, dstPath);
+  PINNED_BOOK.updatePath(srcPath, dstPath);
   if (APP_STATE.openEpubPath == srcPath) {
     APP_STATE.openEpubPath = dstPath;
     APP_STATE.saveToFile();

@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include "FinishedBooksStore.h"
+#include "PinnedBookStore.h"
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "util/BookCacheUtils.h"
@@ -13,14 +14,16 @@ BookContextMenuActivity::BookContextMenuActivity(GfxRenderer& renderer, MappedIn
     : Activity("BookContextMenu", renderer, mappedInput),
       path(path),  // not moved yet -- reused below, before the member init list moves title in
       title(std::move(title)),
-      menuItems(buildMenuItems(available, FINISHED_BOOKS.isFinished(path))) {}
+      menuItems(buildMenuItems(available, FINISHED_BOOKS.isFinished(path), PINNED_BOOK.isPinned(path))) {}
 
 std::vector<BookContextMenuActivity::MenuItem> BookContextMenuActivity::buildMenuItems(const Available& available,
-                                                                                       const bool isFinished) {
+                                                                                       const bool isFinished,
+                                                                                       const bool isPinned) {
   std::vector<MenuItem> items;
   if (available.removeFromRecents) {
     items.push_back({Action::RemoveFromRecents, StrId::STR_REMOVE_FROM_RECENTS});
   }
+  items.push_back({Action::TogglePinned, isPinned ? StrId::STR_UNPIN_FROM_HOME : StrId::STR_PIN_TO_HOME});
   items.push_back({Action::ToggleFinished, isFinished ? StrId::STR_MARK_UNFINISHED : StrId::STR_MARK_FINISHED});
   items.push_back({Action::ClearCache, StrId::STR_DELETE_CACHE});
   items.push_back({Action::Delete, StrId::STR_DELETE});
@@ -73,6 +76,17 @@ void BookContextMenuActivity::selectAction(const int index) {
       // No confirmation, matching ClearCache: reversible, low-risk, and doesn't change anything
       // the caller's list displays (no finished-state badge), so no reload is needed either.
       FINISHED_BOOKS.setFinished(path, !FINISHED_BOOKS.isFinished(path));
+      finishWithResult(false);
+      return;
+    case Action::TogglePinned:
+      // No confirmation, matching ToggleFinished: reversible, low-risk, and doesn't change
+      // anything the caller's list displays, so no reload is needed either. setPinned replaces
+      // any previously-pinned book -- only one book can be pinned at a time.
+      if (PINNED_BOOK.isPinned(path)) {
+        PINNED_BOOK.clearPinned();
+      } else {
+        PINNED_BOOK.setPinned(path, title);
+      }
       finishWithResult(false);
       return;
   }
