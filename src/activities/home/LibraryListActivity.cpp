@@ -147,9 +147,15 @@ void LibraryListActivity::selectLastRead() {
     }
     for (int m = 0; m < static_cast<int>(entry.members.size()); m++) {
       if (entry.members[m].path == lastReadPath) {
-        seriesTopIndex = i;
-        savedTopLevelSelectedIndex = i;
-        selectedIndex = m;
+        // See CoverGridBrowserActivity::selectLastRead() for the full reasoning -- identical here
+        // since both views share LibraryGrouping's collapsed shape.
+        if (SETTINGS.browseBooksStartInSeries) {
+          seriesTopIndex = i;
+          savedTopLevelSelectedIndex = i;
+          selectedIndex = m;
+        } else {
+          selectedIndex = i;
+        }
         return;
       }
     }

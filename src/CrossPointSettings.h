@@ -282,6 +282,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Collapse books sharing a series into one entry in Browse Books' Covers/Titles views (0 = off,
   // 1 = on). Does not affect the stock file browser or Recent Books. Default off.
   uint8_t groupBySeries = 0;
+  // When the last-read book is inside a series, whether Browse Books' two-level last-read
+  // resolution drills straight into that series (1, current/default behavior) or stops at the top
+  // level with the series entry selected but not entered (0). Only meaningful when groupBySeries
+  // is on -- see SettingsActivity::rebuildSettingsLists(), which hides this entry when grouping is
+  // off rather than showing a toggle with nothing to gate. A last-read book that isn't in any
+  // series is unaffected either way -- it's a top-level entry regardless of this setting.
+  uint8_t browseBooksStartInSeries = 1;
   // Show each cell's title caption in the Covers grid (fileBrowserView/recentBooksView ==
   // *_COVERS). Off reclaims the caption's vertical space to draw a taller cover instead --
   // changes the thumbnail cache's cell size, so it regenerates at the new size rather than

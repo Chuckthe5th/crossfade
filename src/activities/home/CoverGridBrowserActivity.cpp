@@ -210,9 +210,17 @@ void CoverGridBrowserActivity::selectLastRead() {
     }
     for (int m = 0; m < static_cast<int>(entry.members.size()); m++) {
       if (entry.members[m].path == lastReadPath) {
-        seriesTopIndex = i;
-        savedTopLevelSelectedIndex = i;
-        selectedIndex = m;
+        // SETTINGS.browseBooksStartInSeries gates the drill-in itself: off, land on the series
+        // entry at the top level (selectedIndex = i, seriesTopIndex left at -1 from above) instead
+        // of entering it. A last-read book outside any series never reaches this branch at all --
+        // see the !entry.isSeries case above -- so this setting can't affect it either way.
+        if (SETTINGS.browseBooksStartInSeries) {
+          seriesTopIndex = i;
+          savedTopLevelSelectedIndex = i;
+          selectedIndex = m;
+        } else {
+          selectedIndex = i;
+        }
         return;
       }
     }

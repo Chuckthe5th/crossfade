@@ -62,6 +62,11 @@ void SettingsActivity::rebuildSettingsLists() {
       }
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
+      // Meaningless with grouping off (no series exist to start in) -- hidden entirely rather
+      // than shown disabled, matching pwrBtnFootnoteBack's precedent above for the same situation.
+      if (setting.valuePtr == &CrossPointSettings::browseBooksStartInSeries && !SETTINGS.groupBySeries) {
+        continue;
+      }
       systemSettings.push_back(setting);
     }
   }
