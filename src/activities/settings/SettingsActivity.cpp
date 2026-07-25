@@ -497,8 +497,17 @@ void SettingsActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
 
+  // Display-only cleanup: CROSSPOINT_VERSION keeps its full "1.0.0-dev-<branch>-<sha>" form for
+  // logs/crash reports/the network User-Agent (see git_branch.py) -- only this on-screen label
+  // drops the "-dev-branch-hash" suffix, so it reads "CrossFade 1.0.0" regardless of which
+  // environment built it.
+  const std::string fullVersion = CROSSPOINT_VERSION;
+  const size_t devSuffixPos = fullVersion.find("-dev");
+  const std::string versionDisplay =
+      "CrossFade " + (devSuffixPos != std::string::npos ? fullVersion.substr(0, devSuffixPos) : fullVersion);
+
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
+                 versionDisplay.c_str());
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
