@@ -11,7 +11,9 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 9;  // v9: added series name + series index (calibre/EPUB3 collection)
+// v9: added series name + series index (calibre/EPUB3 collection)
+// v10: ignore ambiguous guide text references
+constexpr uint8_t BOOK_CACHE_VERSION = 10;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
