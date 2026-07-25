@@ -38,7 +38,7 @@ Selectable in **Settings → System → Browse Books view**:
 - **Titles** — a text list showing each book's title and author.
 - **Covers** — a paginated 3×3 grid of cover thumbnails.
 
-Covers and Titles show the same library in the same order, with a page-position indicator. Covers view has a **titles on / off** option; with titles off, covers render slightly larger.
+Covers and Titles show the same library in the same order, with a page-position indicator. Covers view has a **titles on / off** option (with titles off, covers render slightly larger) and a choice of **vertical or horizontal pagination** — vertical turns pages with the side buttons, horizontal with the front rocker. Thumbnails are generated once at the exact cell size and cached, so the grid stays responsive.
 
 ### Series grouping
 
@@ -70,7 +70,6 @@ Configurable front-button mapping that applies specifically in the reader.
 
 ### Performance
 
-- **Cover grid page turns are fast.** The grid previously issued up to 11 full-panel e-ink refreshes per page turn; it now issues one. Moving the selection redraws only the affected cells instead of re-reading every cover from the SD card.
 - Thumbnails are generated once at the exact cell size and cached as 1-bit BMPs, so rendering is pure streaming with no resize work at page-turn time.
 
 ---
