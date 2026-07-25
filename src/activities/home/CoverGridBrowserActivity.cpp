@@ -300,8 +300,11 @@ int CoverGridBrowserActivity::stepRowDown() const {
   }
   const int col = selectedIndex % cols;
   const int nextRowStart = (selectedIndex / cols + 1) * cols;
+  if (nextRowStart >= n) {
+    return col;  // no next row at all; wrap to row 0, same column
+  }
   const int candidate = nextRowStart + col;
-  return candidate < n ? candidate : col;  // wrap to row 0, same column
+  return std::min(candidate, n - 1);  // clamp into a partial next row
 }
 
 int CoverGridBrowserActivity::stepRowUp() const {
