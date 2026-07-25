@@ -308,6 +308,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
   uint8_t moveFinishedToReadFolder = 0;
+  // Show the pinned book (if any) as its own entry on the Home screen (0 = disabled, 1 = enabled)
+  uint8_t pinBookToHome = 0;
   // Short press Back goes to file browser instead of home (0 = disabled, 1 = enabled)
   uint8_t backShortToFileBrowser = 0;
   // Image rendering mode in EPUB reader

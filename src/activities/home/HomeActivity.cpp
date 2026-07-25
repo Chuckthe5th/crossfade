@@ -16,6 +16,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "PinnedBookStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -28,26 +29,38 @@ int HomeActivity::getMenuItemCount() const {
   if (hasOpdsServers) {
     count++;
   }
+  if (pinnedBookVisible) {
+    count++;
+  }
   return count;
 }
 
-void HomeActivity::loadRecentBooks(int maxBooks) {
+void HomeActivity::loadRecentBooks(int maxBooks, const std::string& excludePath) {
   recentBooks.clear();
   const auto& books = RECENT_BOOKS.getBooks();
   recentBooks.reserve(std::min(static_cast<int>(books.size()), maxBooks));
 
+  // The pinned book (if visible) gets its own Home entry and stays put regardless of reading
+  // activity, so it's excluded here to keep "most recently read" reflecting whatever book was
+  // actually most recent besides it -- unless that's the only book, in which case there's nothing
+  // else to show and it appears in both places.
+  bool excludedAny = false;
   for (const RecentBook& book : books) {
-    // Limit to maximum number of recent books
-    if (recentBooks.size() >= maxBooks) {
-      break;
-    }
-
-    // Skip if file no longer exists
-    if (RecentBooksStore::isMissing(book)) {
+    if (!excludePath.empty() && book.path == excludePath) {
+      excludedAny = true;
       continue;
     }
-
+    if (RecentBooksStore::isMissing(book)) continue;
+    if (static_cast<int>(recentBooks.size()) >= maxBooks) break;
     recentBooks.push_back(book);
+  }
+
+  if (recentBooks.empty() && excludedAny) {
+    for (const RecentBook& book : books) {
+      if (RecentBooksStore::isMissing(book)) continue;
+      if (static_cast<int>(recentBooks.size()) >= maxBooks) break;
+      recentBooks.push_back(book);
+    }
   }
 }
 
@@ -112,12 +125,16 @@ void HomeActivity::onEnter() {
   Activity::onEnter();
 
   hasOpdsServers = OPDS_STORE.hasServers();
+  pinnedBookVisible =
+      SETTINGS.pinBookToHome && PINNED_BOOK.hasPinned() && Storage.exists(PINNED_BOOK.getPinnedPath().c_str());
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  loadRecentBooks(metrics.homeRecentBooksCount);
+  loadRecentBooks(metrics.homeRecentBooksCount, pinnedBookVisible ? PINNED_BOOK.getPinnedPath() : "");
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE
+                      ? 0
+                      : base + menuItemToIndex(initialMenuItem, hasOpdsServers, pinnedBookVisible);
 
   // Trigger first update
   requestUpdate();
@@ -176,7 +193,10 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+    switch (indexToMenuItem(menuIndex, hasOpdsServers, pinnedBookVisible)) {
+      case HomeMenuItem::PINNED:
+        onSelectBook(PINNED_BOOK.getPinnedPath());
+        break;
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
@@ -307,6 +327,15 @@ void HomeActivity::render(RenderLock&&) {
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
+  }
+
+  if (pinnedBookVisible) {
+    // Pinned Book's selectorIndex slot (see indexToMenuItem) sits directly above the base menu
+    // items and below Continue Reading's slot -- inserted here, before the Continue Reading
+    // insert below, so a later Continue Reading insert pushes it to sit visually above Pinned
+    // Book, matching their selectorIndex order.
+    menuItems.insert(menuItems.begin(), PINNED_BOOK.getPinnedTitle().c_str());
+    menuIcons.insert(menuIcons.begin(), Pin);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
