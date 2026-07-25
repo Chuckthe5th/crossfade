@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 
+#include "FinishedBooksStore.h"
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "util/BookCacheUtils.h"
@@ -10,15 +11,17 @@
 BookContextMenuActivity::BookContextMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                  std::string path, std::string title, const Available available)
     : Activity("BookContextMenu", renderer, mappedInput),
-      path(std::move(path)),
+      path(path),  // not moved yet -- reused below, before the member init list moves title in
       title(std::move(title)),
-      menuItems(buildMenuItems(available)) {}
+      menuItems(buildMenuItems(available, FINISHED_BOOKS.isFinished(path))) {}
 
-std::vector<BookContextMenuActivity::MenuItem> BookContextMenuActivity::buildMenuItems(const Available& available) {
+std::vector<BookContextMenuActivity::MenuItem> BookContextMenuActivity::buildMenuItems(const Available& available,
+                                                                                       const bool isFinished) {
   std::vector<MenuItem> items;
   if (available.removeFromRecents) {
     items.push_back({Action::RemoveFromRecents, StrId::STR_REMOVE_FROM_RECENTS});
   }
+  items.push_back({Action::ToggleFinished, isFinished ? StrId::STR_MARK_UNFINISHED : StrId::STR_MARK_FINISHED});
   items.push_back({Action::ClearCache, StrId::STR_DELETE_CACHE});
   items.push_back({Action::Delete, StrId::STR_DELETE});
   return items;
@@ -65,6 +68,12 @@ void BookContextMenuActivity::selectAction(const int index) {
       return;
     case Action::RemoveFromRecents:
       confirmThenRun(Action::RemoveFromRecents, tr(STR_REMOVE_FROM_RECENTS));
+      return;
+    case Action::ToggleFinished:
+      // No confirmation, matching ClearCache: reversible, low-risk, and doesn't change anything
+      // the caller's list displays (no finished-state badge), so no reload is needed either.
+      FINISHED_BOOKS.setFinished(path, !FINISHED_BOOKS.isFinished(path));
+      finishWithResult(false);
       return;
   }
 }

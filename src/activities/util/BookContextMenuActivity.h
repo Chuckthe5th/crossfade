@@ -13,7 +13,7 @@
 // (cache cleared, or the menu was dismissed without acting).
 class BookContextMenuActivity final : public Activity {
  public:
-  enum class Action { Delete, ClearCache, RemoveFromRecents };
+  enum class Action { Delete, ClearCache, RemoveFromRecents, ToggleFinished };
 
   // Which actions apply to this book beyond the always-available Delete/ClearCache.
   struct Available {
@@ -22,8 +22,8 @@ class BookContextMenuActivity final : public Activity {
     bool removeFromRecents = false;
   };
 
-  BookContextMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path,
-                          std::string title, Available available);
+  BookContextMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path, std::string title,
+                          Available available);
 
   void onEnter() override;
   void loop() override;
@@ -34,7 +34,7 @@ class BookContextMenuActivity final : public Activity {
     Action action;
     StrId labelId;
   };
-  static std::vector<MenuItem> buildMenuItems(const Available& available);
+  static std::vector<MenuItem> buildMenuItems(const Available& available, bool isFinished);
 
   void selectAction(int index);
   void runClearCache();
