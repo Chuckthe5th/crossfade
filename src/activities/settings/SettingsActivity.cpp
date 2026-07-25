@@ -70,6 +70,12 @@ void SettingsActivity::rebuildSettingsLists() {
   if (!BoardConfig::hasTouch()) {
     controlsSettings.insert(controlsSettings.begin(),
                             SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+    controlsSettings.insert(
+        controlsSettings.begin() + 1,
+        SettingInfo::Toggle(StrId::STR_READER_FRONT_BUTTONS_ENABLED, &CrossPointSettings::readerFrontButtonsEnabled,
+                            "readerFrontButtonsEnabled", StrId::STR_CAT_CONTROLS));
+    controlsSettings.insert(controlsSettings.begin() + 2, SettingInfo::Action(StrId::STR_REMAP_READER_FRONT_BUTTONS,
+                                                                              SettingAction::RemapReaderFrontButtons));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
@@ -371,6 +377,10 @@ void SettingsActivity::toggleCurrentSetting() {
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
         startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::RemapReaderFrontButtons:
+        startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput, /*forReader=*/true),
+                               resultHandler);
         break;
       case SettingAction::CustomiseStatusBar:
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);

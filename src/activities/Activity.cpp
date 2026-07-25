@@ -2,7 +2,13 @@
 
 #include "ActivityManager.h"
 
-void Activity::onEnter() { LOG_DBG("ACT", "Entering activity: %s", name.c_str()); }
+void Activity::onEnter() {
+  LOG_DBG("ACT", "Entering activity: %s", name.c_str());
+  // Self-correcting for both entering and leaving reader context: every activity transition
+  // updates this to the *new* current activity's own isReaderActivity(), so there's no separate
+  // "leaving the reader" step to remember -- see MappedInputManager::setReaderContext().
+  mappedInput.setReaderContext(isReaderActivity());
+}
 
 void Activity::onExit() { LOG_DBG("ACT", "Exiting activity: %s", name.c_str()); }
 

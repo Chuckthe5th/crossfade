@@ -7,8 +7,11 @@
 
 class ButtonRemapActivity final : public Activity {
  public:
-  explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("ButtonRemap", renderer, mappedInput) {}
+  // forReader: targets SETTINGS.readerFrontButton* instead of the system frontButton* fields --
+  // everything else (the press-to-assign wizard, duplicate checking, reset/cancel) is identical,
+  // only which four settings fields get read from and written to differs.
+  explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool forReader = false)
+      : Activity("ButtonRemap", renderer, mappedInput), forReader(forReader) {}
 
   void onEnter() override;
   void onExit() override;
@@ -16,6 +19,8 @@ class ButtonRemapActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
+  const bool forReader;
+
   // Rendering task state.
 
   // Index of the logical role currently awaiting input.

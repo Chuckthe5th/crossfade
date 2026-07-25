@@ -25,6 +25,15 @@ void copyToField(char* dest, const char* src, const size_t maxLen) {
   dest[maxLen - 1] = '\0';
 }
 
+bool hasDuplicate(const uint8_t (&mapping)[4]) {
+  for (size_t i = 0; i < 4; i++) {
+    for (size_t j = i + 1; j < 4; j++) {
+      if (mapping[i] == mapping[j]) return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 void CrossPointSettings::migrateLegacySettingsFile() {
@@ -44,16 +53,22 @@ void CrossPointSettings::migrateLegacySettingsFile() {
 void CrossPointSettings::validateFrontButtonMapping(CrossPointSettings& settings) {
   const uint8_t mapping[] = {settings.frontButtonBack, settings.frontButtonConfirm, settings.frontButtonLeft,
                              settings.frontButtonRight};
-  for (size_t i = 0; i < 4; i++) {
-    for (size_t j = i + 1; j < 4; j++) {
-      if (mapping[i] == mapping[j]) {
-        settings.frontButtonBack = FRONT_HW_BACK;
-        settings.frontButtonConfirm = FRONT_HW_CONFIRM;
-        settings.frontButtonLeft = FRONT_HW_LEFT;
-        settings.frontButtonRight = FRONT_HW_RIGHT;
-        return;
-      }
-    }
+  if (hasDuplicate(mapping)) {
+    settings.frontButtonBack = FRONT_HW_BACK;
+    settings.frontButtonConfirm = FRONT_HW_CONFIRM;
+    settings.frontButtonLeft = FRONT_HW_LEFT;
+    settings.frontButtonRight = FRONT_HW_RIGHT;
+  }
+
+  // Independent of the system mapping above: a collision here only resets the reader-specific
+  // table, never the system one, and doesn't touch readerFrontButtonsEnabled.
+  const uint8_t readerMapping[] = {settings.readerFrontButtonBack, settings.readerFrontButtonConfirm,
+                                   settings.readerFrontButtonLeft, settings.readerFrontButtonRight};
+  if (hasDuplicate(readerMapping)) {
+    settings.readerFrontButtonBack = FRONT_HW_BACK;
+    settings.readerFrontButtonConfirm = FRONT_HW_CONFIRM;
+    settings.readerFrontButtonLeft = FRONT_HW_LEFT;
+    settings.readerFrontButtonRight = FRONT_HW_RIGHT;
   }
 }
 
@@ -100,6 +115,13 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonConfirm"] = frontButtonConfirm;
   doc["frontButtonLeft"] = frontButtonLeft;
   doc["frontButtonRight"] = frontButtonRight;
+  // Reader-specific front button remap — same reasoning, managed by the same sub-activity in
+  // forReader mode. readerFrontButtonsEnabled itself IS in SettingsList (a plain toggle), so the
+  // generic loop above already handles it.
+  doc["readerFrontButtonBack"] = readerFrontButtonBack;
+  doc["readerFrontButtonConfirm"] = readerFrontButtonConfirm;
+  doc["readerFrontButtonLeft"] = readerFrontButtonLeft;
+  doc["readerFrontButtonRight"] = readerFrontButtonRight;
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   doc["fontFamily"] = fontFamily;
   // SD card font family name — not in SettingsList, save manually
@@ -204,6 +226,15 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   frontButtonLeft = clamp(doc["frontButtonLeft"] | (uint8_t)FRONT_HW_LEFT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_LEFT);
   frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
+  // Reader-specific front button remap — same reasoning as above.
+  readerFrontButtonBack =
+      clamp(doc["readerFrontButtonBack"] | (uint8_t)FRONT_HW_BACK, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_BACK);
+  readerFrontButtonConfirm =
+      clamp(doc["readerFrontButtonConfirm"] | (uint8_t)FRONT_HW_CONFIRM, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_CONFIRM);
+  readerFrontButtonLeft =
+      clamp(doc["readerFrontButtonLeft"] | (uint8_t)FRONT_HW_LEFT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_LEFT);
+  readerFrontButtonRight =
+      clamp(doc["readerFrontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.

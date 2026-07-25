@@ -61,8 +61,17 @@ class MappedInputManager {
   // so portrait UI (home, settings) never swaps while the reader and its menus do.
   [[nodiscard]] bool isNavDirectionSwapped() const;
 
+  // Set by Activity::onEnter() on every activity transition, to whatever the *new* current
+  // activity's isReaderActivity() reports -- self-correcting for both entering and leaving reader
+  // context, with no per-reader-activity wiring needed. Gates SETTINGS.readerFrontButtonBack/
+  // Confirm/Left/Right in mapButton()/mapLabels(): only actual reading activities (EpubReader/Txt/
+  // XtcReaderActivity) report true, so reader sub-menus (chapter list, bookmarks, the reader menu
+  // itself) still use the system mapping like everything else.
+  void setReaderContext(const bool active) { readerContextActive = active; }
+
  private:
   HalGPIO& gpio;
+  bool readerContextActive = false;
   // Logical-to-physical button mapping depends on what the user is actually looking at: when the
   // screen is rendered rotated, the directional buttons must flip to match. The renderer is the only
   // authority on the *live* orientation (the reader rotates it and restores portrait on exit), so we

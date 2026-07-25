@@ -19,20 +19,25 @@ bool MappedInputManager::isNavDirectionSwapped() const {
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
   const auto sideLayout = SETTINGS.sideButtonLayout;
+  // The reader-specific table only applies while an actual reader activity is current (see
+  // Activity::onEnter(), which sets this on every activity transition) AND the user has opted
+  // into it -- readerFrontButtonBack etc. can hold a previously-set mapping even while disabled,
+  // so this check must gate on the toggle, not just whether those fields differ from default.
+  const bool useReaderMapping = readerContextActive && SETTINGS.readerFrontButtonsEnabled;
 
   switch (button) {
     case Button::Back:
       // Logical Back maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonBack);
+      return (gpio.*fn)(useReaderMapping ? SETTINGS.readerFrontButtonBack : SETTINGS.frontButtonBack);
     case Button::Confirm:
       // Logical Confirm maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonConfirm);
+      return (gpio.*fn)(useReaderMapping ? SETTINGS.readerFrontButtonConfirm : SETTINGS.frontButtonConfirm);
     case Button::Left:
       // Logical Left maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonLeft);
+      return (gpio.*fn)(useReaderMapping ? SETTINGS.readerFrontButtonLeft : SETTINGS.frontButtonLeft);
     case Button::Right:
       // Logical Right maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonRight);
+      return (gpio.*fn)(useReaderMapping ? SETTINGS.readerFrontButtonRight : SETTINGS.frontButtonRight);
     case Button::Up:
       // Side buttons remain fixed for Up/Down.
       return (gpio.*fn)(HalGPIO::BTN_UP);
@@ -304,19 +309,28 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
   const char* leftLabel = swapLabels ? next : previous;
   const char* rightLabel = swapLabels ? previous : next;
 
+  // Same reader-mapping gate as mapButton() -- hints must show where each logical role actually
+  // is right now, not the system default, or the labels would point at the wrong physical button
+  // whenever the reader-specific mapping is what's actually in effect.
+  const bool useReaderMapping = readerContextActive && SETTINGS.readerFrontButtonsEnabled;
+  const uint8_t backHw = useReaderMapping ? SETTINGS.readerFrontButtonBack : SETTINGS.frontButtonBack;
+  const uint8_t confirmHw = useReaderMapping ? SETTINGS.readerFrontButtonConfirm : SETTINGS.frontButtonConfirm;
+  const uint8_t leftHw = useReaderMapping ? SETTINGS.readerFrontButtonLeft : SETTINGS.frontButtonLeft;
+  const uint8_t rightHw = useReaderMapping ? SETTINGS.readerFrontButtonRight : SETTINGS.frontButtonRight;
+
   // Build the label order based on the configured hardware mapping.
   auto labelForHardware = [&](uint8_t hw) -> const char* {
     // Compare against configured logical roles and return the matching label.
-    if (hw == SETTINGS.frontButtonBack) {
+    if (hw == backHw) {
       return back;
     }
-    if (hw == SETTINGS.frontButtonConfirm) {
+    if (hw == confirmHw) {
       return confirm;
     }
-    if (hw == SETTINGS.frontButtonLeft) {
+    if (hw == leftHw) {
       return leftLabel;
     }
-    if (hw == SETTINGS.frontButtonRight) {
+    if (hw == rightHw) {
       return rightLabel;
     }
     return "";
