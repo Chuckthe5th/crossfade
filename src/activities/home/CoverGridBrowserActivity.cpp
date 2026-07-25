@@ -276,6 +276,10 @@ void CoverGridBrowserActivity::onExit() {
   topLevelEntries.clear();
 }
 
+bool CoverGridBrowserActivity::horizontalDirection() const {
+  return SETTINGS.coverGridDirection == CrossPointSettings::COVER_GRID_HORIZONTAL;
+}
+
 int CoverGridBrowserActivity::hitTestCell(const int tx, const int ty) const {
   if (ty < gridTop || tx < gridLeft || cellWidth <= 0 || cellHeight <= 0) {
     return -1;
@@ -286,7 +290,7 @@ int CoverGridBrowserActivity::hitTestCell(const int tx, const int ty) const {
     return -1;
   }
   const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
-  const int flatIndex = pageStart + row * cols + col;
+  const int flatIndex = pageStart + (horizontalDirection() ? col * rows + row : row * cols + col);
   if (flatIndex >= currentCount()) {
     return -1;
   }
@@ -369,37 +373,46 @@ void CoverGridBrowserActivity::loop() {
 
   const int total = currentCount();
 
-  // Rows: side Up/Down. Single step on release (matching FileBrowserActivity/
-  // RecentBooksActivity's release-edge convention for paginated lists);
-  // continuous hold reuses their exact nextPageIndex/previousPageIndex page-jump
-  // formula unchanged, which lands on jumping a full itemsPerPage -- i.e. the
-  // next/previous page of rows.
-  buttonNavigator.onRelease({Button::Down}, [this] {
-    selectedIndex = stepPrimaryForward(cols);
+  // Primary axis: side Up/Down in Vertical mode (primary count = cols, a "row"), front Left/Right
+  // in Horizontal mode (primary count = rows, a "column") -- whichever pair the fill order
+  // advances fastest across, so a full itemsPerPage continuous-hold jump lands exactly on the next
+  // page (see SETTINGS.coverGridDirection). Single step on release (matching FileBrowserActivity/
+  // RecentBooksActivity's release-edge convention for paginated lists); continuous hold reuses
+  // their exact nextPageIndex/previousPageIndex page-jump formula unchanged either way.
+  const bool horizontal = horizontalDirection();
+  const int primaryCount = horizontal ? rows : cols;
+  const Button primaryForward = horizontal ? Button::Right : Button::Down;
+  const Button primaryBackward = horizontal ? Button::Left : Button::Up;
+  primaryNavigator.onRelease({primaryForward}, [this, primaryCount] {
+    selectedIndex = stepPrimaryForward(primaryCount);
     requestUpdate();
   });
-  buttonNavigator.onRelease({Button::Up}, [this] {
-    selectedIndex = stepPrimaryBackward(cols);
+  primaryNavigator.onRelease({primaryBackward}, [this, primaryCount] {
+    selectedIndex = stepPrimaryBackward(primaryCount);
     requestUpdate();
   });
-  buttonNavigator.onContinuous({Button::Down}, [this, total] {
+  primaryNavigator.onContinuous({primaryForward}, [this, total] {
     selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, total, itemsPerPage);
     requestUpdate();
   });
-  buttonNavigator.onContinuous({Button::Up}, [this, total] {
+  primaryNavigator.onContinuous({primaryBackward}, [this, total] {
     selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, total, itemsPerPage);
     requestUpdate();
   });
 
-  // Columns: front Left/Right move within the current row only. No stock list
-  // activity has a second axis to mirror a long-press convention from, so this
-  // is single-step only.
-  columnNavigator.onRelease({Button::Right}, [this] {
-    selectedIndex = stepSecondary(1, cols);
+  // Secondary axis: the other button pair, confined to the current row/column only. No stock list
+  // activity has a second axis to mirror a long-press convention from, so this is single-step
+  // only regardless of direction. Physical Up/Down and Left/Right always move the highlight
+  // visually up/down/left/right either way -- only which pair is primary (page-jumping) vs
+  // secondary (confined) swaps with the direction setting.
+  const Button secondaryForward = horizontal ? Button::Down : Button::Right;
+  const Button secondaryBackward = horizontal ? Button::Up : Button::Left;
+  secondaryNavigator.onRelease({secondaryForward}, [this, primaryCount] {
+    selectedIndex = stepSecondary(1, primaryCount);
     requestUpdate();
   });
-  columnNavigator.onRelease({Button::Left}, [this] {
-    selectedIndex = stepSecondary(-1, cols);
+  secondaryNavigator.onRelease({secondaryBackward}, [this, primaryCount] {
+    selectedIndex = stepSecondary(-1, primaryCount);
     requestUpdate();
   });
 
@@ -535,8 +548,16 @@ void CoverGridBrowserActivity::drawStackOverlay(const int coverX, const int cove
 
 void CoverGridBrowserActivity::cellOrigin(const int flatIndex, const int pageStart, int& outX, int& outY) const {
   const int localIdx = flatIndex - pageStart;
-  outX = gridLeft + (localIdx % cols) * cellWidth;
-  outY = gridTop + (localIdx / cols) * cellHeight;
+  int col, row;
+  if (horizontalDirection()) {
+    col = localIdx / rows;
+    row = localIdx % rows;
+  } else {
+    col = localIdx % cols;
+    row = localIdx / cols;
+  }
+  outX = gridLeft + col * cellWidth;
+  outY = gridTop + row * cellHeight;
 }
 
 void CoverGridBrowserActivity::computeHeaderText(const int flatIndex, std::string& outTitle,
@@ -629,9 +650,10 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
                  headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle.empty() ? nullptr : subtitle.c_str());
 
   if (!entries.empty()) {
+    const bool horizontal = horizontalDirection();
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
-        const int flatIndex = pageStart + r * cols + c;
+        const int flatIndex = pageStart + (horizontal ? c * rows + r : r * cols + c);
         if (flatIndex >= static_cast<int>(entries.size())) {
           continue;
         }

@@ -161,6 +161,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Recent books view: flat list (stock) or a paginated cover grid
   enum RECENT_BOOKS_VIEW { RECENT_BOOKS_LIST = 0, RECENT_BOOKS_COVERS = 1, RECENT_BOOKS_VIEW_COUNT };
 
+  // Cover grid pagination direction (CoverGridBrowserActivity, shared by Browse Books and Recent
+  // Books): Vertical fills row-major with side Up/Down as the page-turning axis (default/original
+  // behavior); Horizontal fills column-major with front Left/Right as the page-turning axis.
+  enum COVER_GRID_DIRECTION { COVER_GRID_VERTICAL = 0, COVER_GRID_HORIZONTAL = 1, COVER_GRID_DIRECTION_COUNT };
+
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
@@ -295,6 +300,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // reusing anything cached for the with-titles layout (see Epub::getThumbBmpPath(w, h)).
   // Default on, matching the grid's original behavior.
   uint8_t coversShowTitles = 1;
+  // Cover grid pagination direction: COVER_GRID_VERTICAL (default) or COVER_GRID_HORIZONTAL --
+  // see the COVER_GRID_DIRECTION enum above. Applies to both Browse Books and Recent Books, since
+  // both use the same CoverGridBrowserActivity navigation code.
+  uint8_t coverGridDirection = COVER_GRID_VERTICAL;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)

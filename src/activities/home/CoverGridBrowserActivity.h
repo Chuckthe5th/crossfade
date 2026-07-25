@@ -31,12 +31,14 @@ class CoverGridBrowserActivity final : public Activity {
   enum class Source { Library, RecentBooks };
 
  private:
-  // Two independent axes: buttonNavigator (side Up/Down) moves by row and owns
-  // the long-press page jump; columnNavigator (front Left/Right) moves within
-  // the current row. Kept separate so ButtonNavigator's held-time bookkeeping
-  // for one axis's continuous-hold detection can't interfere with the other's.
-  ButtonNavigator buttonNavigator;
-  ButtonNavigator columnNavigator;
+  // Two independent axes: primaryNavigator moves by a full row/column and owns the long-press page
+  // jump; secondaryNavigator moves within the current row/column only. Which physical buttons each
+  // is bound to depends on SETTINGS.coverGridDirection (side Up/Down + primary=cols in Vertical,
+  // front Left/Right + primary=rows in Horizontal -- see loop()). Kept as two instances so
+  // ButtonNavigator's held-time bookkeeping for one axis's continuous-hold detection can't
+  // interfere with the other's.
+  ButtonNavigator primaryNavigator;
+  ButtonNavigator secondaryNavigator;
   LongPressAction longPressAction;
 
   const Source source;
@@ -105,15 +107,19 @@ class CoverGridBrowserActivity final : public Activity {
   // chapter-progress subtitle exactly as before grouping existed.
   void computeHeaderText(int flatIndex, std::string& outTitle, std::string& outSubtitle) const;
   // Axis-agnostic grid stepping over the current page's entries, expressed as `primaryCount`
-  // secondary-axis positions per primary-axis group -- currently always called with `cols` (a
-  // "row" spans `cols` entries, primary axis = rows), which is exactly the row/column stepping
-  // this replaced. Only the very last primary group can be short (a partial last row), so
-  // stepPrimaryForward/Backward clamp into it rather than overshooting past it when wrapping at
-  // the true first/last group; stepSecondary wraps within the current primary group only, never
-  // crossing into another one.
+  // secondary-axis positions per primary-axis group -- `cols` in Vertical mode (a "row" spans
+  // `cols` entries, primary axis = rows), `rows` in Horizontal mode (a "column" spans `rows`
+  // entries, primary axis = columns). Only the very last primary group can be short (a partial
+  // last row/column), so stepPrimaryForward/Backward clamp into it rather than overshooting past
+  // it when wrapping at the true first/last group; stepSecondary wraps within the current primary
+  // group only, never crossing into another one.
   int stepPrimaryForward(int primaryCount) const;
   int stepPrimaryBackward(int primaryCount) const;
   int stepSecondary(int delta, int primaryCount) const;
+  // SETTINGS.coverGridDirection == COVER_GRID_HORIZONTAL. Checked from render()/cellOrigin()/
+  // hitTestCell()/loop() to pick column-major vs row-major fill and which physical buttons drive
+  // the primary/secondary axes -- see the primaryNavigator/secondaryNavigator comment above.
+  bool horizontalDirection() const;
   // 2D analogue of Activity::handleListTouch() for a grid instead of a 1D list:
   // maps a touch point to a flat book index via cellWidth/cellHeight/gridLeft/
   // gridTop. Untested on hardware -- no C3 target (X3/X4) has touch.
