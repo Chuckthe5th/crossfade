@@ -104,13 +104,16 @@ class CoverGridBrowserActivity final : public Activity {
   // no subtitle; an individual book (standalone or a drilled-in series member) shows its title and
   // chapter-progress subtitle exactly as before grouping existed.
   void computeHeaderText(int flatIndex, std::string& outTitle, std::string& outSubtitle) const;
-  // Row/column stepping over the current page's entries, treated as a grid of
-  // `cols` columns where only the last row may be short. Both row steps wrap
-  // (bottom row wraps to row 0 same column and vice versa); column steps wrap
-  // within the current row only, never crossing into another row.
-  int stepRowDown() const;
-  int stepRowUp() const;
-  int stepColumn(int delta) const;
+  // Axis-agnostic grid stepping over the current page's entries, expressed as `primaryCount`
+  // secondary-axis positions per primary-axis group -- currently always called with `cols` (a
+  // "row" spans `cols` entries, primary axis = rows), which is exactly the row/column stepping
+  // this replaced. Only the very last primary group can be short (a partial last row), so
+  // stepPrimaryForward/Backward clamp into it rather than overshooting past it when wrapping at
+  // the true first/last group; stepSecondary wraps within the current primary group only, never
+  // crossing into another one.
+  int stepPrimaryForward(int primaryCount) const;
+  int stepPrimaryBackward(int primaryCount) const;
+  int stepSecondary(int delta, int primaryCount) const;
   // 2D analogue of Activity::handleListTouch() for a grid instead of a 1D list:
   // maps a touch point to a flat book index via cellWidth/cellHeight/gridLeft/
   // gridTop. Untested on hardware -- no C3 target (X3/X4) has touch.

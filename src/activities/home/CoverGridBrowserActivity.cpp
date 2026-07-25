@@ -293,47 +293,47 @@ int CoverGridBrowserActivity::hitTestCell(const int tx, const int ty) const {
   return flatIndex;
 }
 
-int CoverGridBrowserActivity::stepRowDown() const {
+int CoverGridBrowserActivity::stepPrimaryForward(const int primaryCount) const {
   const int n = currentCount();
-  if (n == 0 || cols <= 0) {
+  if (n == 0 || primaryCount <= 0) {
     return selectedIndex;
   }
-  const int col = selectedIndex % cols;
-  const int nextRowStart = (selectedIndex / cols + 1) * cols;
-  if (nextRowStart >= n) {
-    return col;  // no next row at all; wrap to row 0, same column
+  const int secondary = selectedIndex % primaryCount;
+  const int nextGroupStart = (selectedIndex / primaryCount + 1) * primaryCount;
+  if (nextGroupStart >= n) {
+    return secondary;  // no next group at all; wrap to group 0, same secondary position
   }
-  const int candidate = nextRowStart + col;
-  return std::min(candidate, n - 1);  // clamp into a partial next row
+  const int candidate = nextGroupStart + secondary;
+  return std::min(candidate, n - 1);  // clamp into a partial next group
 }
 
-int CoverGridBrowserActivity::stepRowUp() const {
+int CoverGridBrowserActivity::stepPrimaryBackward(const int primaryCount) const {
   const int n = currentCount();
-  if (n == 0 || cols <= 0) {
+  if (n == 0 || primaryCount <= 0) {
     return selectedIndex;
   }
-  const int col = selectedIndex % cols;
-  const int row = selectedIndex / cols;
-  if (row > 0) {
-    return (row - 1) * cols + col;
+  const int secondary = selectedIndex % primaryCount;
+  const int groupIdx = selectedIndex / primaryCount;
+  if (groupIdx > 0) {
+    return (groupIdx - 1) * primaryCount + secondary;
   }
-  // Wrap to the bottom row; if it's short of this column (partial last row),
-  // the row above it is guaranteed full since only the last row can be short.
-  const int lastRow = (n - 1) / cols;
-  const int candidate = lastRow * cols + col;
-  return candidate < n ? candidate : candidate - cols;
+  // Wrap to the last group; if it's short of this secondary position (partial last group),
+  // the group before it is guaranteed full since only the last group can be short.
+  const int lastGroupIdx = (n - 1) / primaryCount;
+  const int candidate = lastGroupIdx * primaryCount + secondary;
+  return candidate < n ? candidate : candidate - primaryCount;
 }
 
-int CoverGridBrowserActivity::stepColumn(const int delta) const {
+int CoverGridBrowserActivity::stepSecondary(const int delta, const int primaryCount) const {
   const int n = currentCount();
-  if (n == 0 || cols <= 0) {
+  if (n == 0 || primaryCount <= 0) {
     return selectedIndex;
   }
-  const int rowStart = (selectedIndex / cols) * cols;
-  const int rowCount = std::min(cols, n - rowStart);
-  const int localCol = selectedIndex - rowStart;
-  const int newLocalCol = (localCol + delta + rowCount) % rowCount;
-  return rowStart + newLocalCol;
+  const int groupStart = (selectedIndex / primaryCount) * primaryCount;
+  const int groupCount = std::min(primaryCount, n - groupStart);
+  const int localSecondary = selectedIndex - groupStart;
+  const int newLocalSecondary = (localSecondary + delta + groupCount) % groupCount;
+  return groupStart + newLocalSecondary;
 }
 
 void CoverGridBrowserActivity::loop() {
@@ -375,11 +375,11 @@ void CoverGridBrowserActivity::loop() {
   // formula unchanged, which lands on jumping a full itemsPerPage -- i.e. the
   // next/previous page of rows.
   buttonNavigator.onRelease({Button::Down}, [this] {
-    selectedIndex = stepRowDown();
+    selectedIndex = stepPrimaryForward(cols);
     requestUpdate();
   });
   buttonNavigator.onRelease({Button::Up}, [this] {
-    selectedIndex = stepRowUp();
+    selectedIndex = stepPrimaryBackward(cols);
     requestUpdate();
   });
   buttonNavigator.onContinuous({Button::Down}, [this, total] {
@@ -395,11 +395,11 @@ void CoverGridBrowserActivity::loop() {
   // activity has a second axis to mirror a long-press convention from, so this
   // is single-step only.
   columnNavigator.onRelease({Button::Right}, [this] {
-    selectedIndex = stepColumn(1);
+    selectedIndex = stepSecondary(1, cols);
     requestUpdate();
   });
   columnNavigator.onRelease({Button::Left}, [this] {
-    selectedIndex = stepColumn(-1);
+    selectedIndex = stepSecondary(-1, cols);
     requestUpdate();
   });
 
