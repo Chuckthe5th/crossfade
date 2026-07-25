@@ -11,6 +11,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/util/BookContextMenuActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -155,6 +156,32 @@ void LibraryListActivity::selectLastRead() {
   }
 }
 
+void LibraryListActivity::openContextMenu(const LibraryGrouping::Entry& entry) {
+  const std::string path = entry.path;
+  const std::string title = entry.title;
+
+  auto handler = [this](const ActivityResult& res) {
+    const auto* result = std::get_if<BookActionResult>(&res.data);
+    if (!result || !result->changed) {
+      return;
+    }
+    seriesTopIndex = -1;  // the list just changed underneath any drill-down; snap back to top level
+    loadBooks();
+    const auto& entries = currentEntries();
+    if (entries.empty()) {
+      selectedIndex = 0;
+    } else if (selectedIndex >= static_cast<int>(entries.size())) {
+      selectedIndex = static_cast<int>(entries.size()) - 1;
+    }
+    loadedPageStart = -1;
+    requestUpdate(true);
+  };
+
+  startActivityForResult(std::make_unique<BookContextMenuActivity>(renderer, mappedInput, path, title,
+                                                                   BookContextMenuActivity::Available{}),
+                         std::move(handler));
+}
+
 void LibraryListActivity::onEnter() {
   Activity::onEnter();
 
@@ -179,6 +206,17 @@ void LibraryListActivity::loop() {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+
+  // Long-press Confirm opens the per-book context menu; short-press (below) opens/drills in.
+  // update() must run every tick regardless of selection validity -- it also owns swallowing the
+  // eventual release so it doesn't also fall through to the short-press handler below.
+  if (longPressAction.update(mappedInput, MappedInputManager::Button::Confirm)) {
+    const auto& entries = currentEntries();
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(entries.size()) && !entries[selectedIndex].isSeries) {
+      openContextMenu(entries[selectedIndex]);
+    }
+    return;
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     activateSelected();

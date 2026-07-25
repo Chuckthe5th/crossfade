@@ -6,6 +6,7 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 #include "util/LibraryGrouping.h"
+#include "util/LongPressAction.h"
 
 // Third fileBrowserView option alongside the stock FileBrowserActivity (Files) and
 // CoverGridBrowserActivity (Covers): a flat, paginated title+author list over the whole library,
@@ -23,6 +24,7 @@
 class LibraryListActivity final : public Activity {
  private:
   ButtonNavigator buttonNavigator;
+  LongPressAction longPressAction;
 
   std::vector<LibraryGrouping::Entry> topLevelEntries;
   int selectedIndex = 0;
@@ -63,6 +65,11 @@ class LibraryListActivity final : public Activity {
   // Two-level last-read search -- see CoverGridBrowserActivity::selectLastRead for the reasoning;
   // identical here since both views share LibraryGrouping's collapsed shape.
   void selectLastRead();
+  // Opens the per-book context menu (long-press Confirm) -- see
+  // CoverGridBrowserActivity::openContextMenu for the full reasoning (series-entry gating, why a
+  // change snaps back to the top level). Never offers Remove from Recents: this view is always the
+  // whole library, never Recent Books.
+  void openContextMenu(const LibraryGrouping::Entry& entry);
 
  public:
   explicit LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

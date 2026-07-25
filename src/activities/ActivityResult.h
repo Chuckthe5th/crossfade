@@ -63,9 +63,15 @@ struct FilePathResult {
   std::string path;
 };
 
+// Reported by BookContextMenuActivity: whether the acted-on book's list entry needs refreshing
+// (Delete/Remove from Recents) or nothing changed (cache cleared, or the menu was dismissed).
+struct BookActionResult {
+  bool changed = false;
+};
+
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult, BookActionResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

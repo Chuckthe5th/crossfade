@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "activities/util/BookContextMenuActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -218,6 +219,36 @@ void CoverGridBrowserActivity::selectLastRead() {
   }
 }
 
+void CoverGridBrowserActivity::openContextMenu(const LibraryGrouping::Entry& entry) {
+  const std::string path = entry.path;
+  const std::string title = entry.title;
+  const bool isRecents = source == Source::RecentBooks;
+
+  auto handler = [this](const ActivityResult& res) {
+    const auto* result = std::get_if<BookActionResult>(&res.data);
+    if (!result || !result->changed) {
+      return;
+    }
+    seriesTopIndex = -1;  // the list just changed underneath any drill-down; snap back to top level
+    loadBooks();
+    const auto& entries = currentEntries();
+    if (entries.empty()) {
+      selectedIndex = 0;
+    } else if (selectedIndex >= static_cast<int>(entries.size())) {
+      selectedIndex = static_cast<int>(entries.size()) - 1;
+    }
+    loadedPageStart = -1;
+    lastRenderedIndex = -1;
+    hasComposedPage = false;
+    requestUpdate(true);
+  };
+
+  startActivityForResult(
+      std::make_unique<BookContextMenuActivity>(renderer, mappedInput, path, title,
+                                                BookContextMenuActivity::Available{.removeFromRecents = isRecents}),
+      std::move(handler));
+}
+
 void CoverGridBrowserActivity::onEnter() {
   Activity::onEnter();
 
@@ -310,6 +341,18 @@ void CoverGridBrowserActivity::loop() {
   }
 
   if (currentCount() == 0) {
+    return;
+  }
+
+  // Long-press Confirm opens the per-book context menu; short-press (below, on release) opens the
+  // reader or drills into a series as usual. update() must run every tick regardless of selection
+  // validity -- it also owns swallowing the eventual release so it doesn't also fall through to
+  // the short-press handler -- so the fire check is a single call, not a guard.
+  if (longPressAction.update(mappedInput, Button::Confirm)) {
+    const auto& entries = currentEntries();
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(entries.size()) && !entries[selectedIndex].isSeries) {
+      openContextMenu(entries[selectedIndex]);
+    }
     return;
   }
 

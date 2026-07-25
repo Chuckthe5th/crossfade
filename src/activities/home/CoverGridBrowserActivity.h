@@ -6,6 +6,7 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 #include "util/LibraryGrouping.h"
+#include "util/LongPressAction.h"
 
 // Alternative to FileBrowserActivity AND RecentBooksActivity: a paginated grid
 // of cover thumbnails, either the whole SD card (SETTINGS.fileBrowserView) or
@@ -36,6 +37,7 @@ class CoverGridBrowserActivity final : public Activity {
   // for one axis's continuous-hold detection can't interfere with the other's.
   ButtonNavigator buttonNavigator;
   ButtonNavigator columnNavigator;
+  LongPressAction longPressAction;
 
   const Source source;
   std::vector<LibraryGrouping::Entry> topLevelEntries;
@@ -118,6 +120,12 @@ class CoverGridBrowserActivity final : public Activity {
   void exitSeries();
   // Opens the reader on the selected entry, or drills into it if it's a series.
   void activateSelected();
+  // Opens the per-book context menu (long-press Confirm) for a standalone entry -- never called
+  // for a series entry, which represents multiple books, not one. Available.removeFromRecents is
+  // set for Source::RecentBooks only. On a change (delete/remove), reloads the list and -- since
+  // the list just changed underneath any series drill-down, which the deleted/removed book could
+  // have been part of -- snaps back to the top level rather than trying to preserve it.
+  void openContextMenu(const LibraryGrouping::Entry& entry);
   // Two-level last-read search: if the last-read book is a standalone top-level entry, selects
   // it. If it's inside a series, drills directly into that series with the book selected and
   // remembers the series' top-level position for Back -- landing one level removed from the
