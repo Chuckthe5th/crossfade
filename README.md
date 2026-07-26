@@ -60,6 +60,18 @@ Gains its own **List / Covers** view, sharing the same cover-grid presentation.
 
 Long-press **Confirm** on a book (in Covers, Titles, or Recent Books) opens a context menu with per-book actions, including **Mark as finished**, which is also available from the in-book reader menu.
 
+### Pin a book to Home *(new in v1.1.0)*
+
+Optional — **Settings → System → Pin Book to Home**. Long-press **Confirm** on any book and choose **Pin to Home** to give it its own permanent Home-screen entry, independent of Recent Books — useful for a book you return to daily (a devotional, journal, or reference) that isn't necessarily what you read most recently. Selecting it resumes at its saved position, the same as Continue Reading. The entry only appears when there's genuinely enough room for it on screen for your theme and settings; otherwise it stays cleanly hidden rather than crowding out other rows.
+
+### Transfer & Sync *(new in v1.1.0)*
+
+OPDS Browser and File Transfer are combined into a single **Transfer & Sync** Home entry. With no OPDS servers configured it goes straight to File Transfer, the same one-tap experience as before; with servers configured it opens a small picker between the two.
+
+### Hide button hints *(new in v1.1.0)*
+
+Optional — **Settings → System → Hide Button Hints**. Removes the on-screen row showing what each physical button does, and lets whatever's above it reclaim that space — the same behavior touch-capable devices already get automatically.
+
 ### Smarter sleep behavior
 
 Quick Resume now only applies when you're actually reading. If the device sleeps while browsing a grid, list, or menu, it shows the normal sleep screen instead of trying to resume a page that doesn't exist — which also avoids a wasted state-save and a flash of stale content on wake. Upstream's timeout-vs-manual Quick Resume options still apply while reading.
