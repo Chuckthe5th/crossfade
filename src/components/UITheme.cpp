@@ -56,14 +56,16 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
 
 const ThemeMetrics& UITheme::getMetrics() const {
   // hasTouch() can flip once touch init completes after static construction, so the
-  // cached copy is refreshed when the flag differs instead of copying the struct per call.
-  const bool touch = gpio.hasTouch();
-  if (!metricsValid || touch != metricsForTouch) {
+  // cached copy is refreshed when the flag (or the hideButtonHints setting) differs instead of
+  // copying the struct per call. A touch panel already makes the hint labels redundant, and
+  // hideButtonHints lets a non-touch user opt into the same reclaimed space.
+  const bool hideHints = gpio.hasTouch() || SETTINGS.hideButtonHints;
+  if (!metricsValid || hideHints != metricsHintsHidden) {
     adjustedMetrics = *currentMetrics;
-    if (touch) {
+    if (hideHints) {
       adjustedMetrics.buttonHintsHeight = 0;
     }
-    metricsForTouch = touch;
+    metricsHintsHidden = hideHints;
     metricsValid = true;
   }
   return adjustedMetrics;

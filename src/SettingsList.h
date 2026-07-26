@@ -272,6 +272,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_PIN_BOOK_TO_HOME, &CrossPointSettings::pinBookToHome, "pinBookToHome",
                             StrId::STR_CAT_SYSTEM),
+        SettingInfo::Toggle(StrId::STR_HIDE_BUTTON_HINTS, &CrossPointSettings::hideButtonHints, "hideButtonHints",
+                            StrId::STR_CAT_SYSTEM),
 
         // OPDS download folder: persisted + web-exposed, but category-less so it
         // is hidden from the on-device Settings screen (edited via OPDS UI).
