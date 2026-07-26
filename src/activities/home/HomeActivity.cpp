@@ -22,12 +22,9 @@
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 4;  // File Browser, Recents, Transfer & Sync, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
-  }
-  if (hasOpdsServers) {
-    count++;
   }
   if (pinnedBookVisible) {
     count++;
@@ -142,8 +139,7 @@ void HomeActivity::onEnter() {
       }
     }
     const int continueReadingRow = (metrics.homeContinueReadingInMenu && anyNonMissingRecent) ? 1 : 0;
-    const int totalFlatItems =
-        4 /* Browse, Recents, Transfer, Settings */ + (hasOpdsServers ? 1 : 0) + continueReadingRow + 1 /* Pinned */;
+    const int totalFlatItems = 4 /* Browse, Recents, Transfer & Sync, Settings */ + continueReadingRow + 1 /* Pinned */;
     const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
     const int bottomEdge = GUI.getMenuBottomEdge(renderer, menuTop, totalFlatItems);
     // metrics.buttonHintsHeight is already 0 when hints are hidden (touch device or
@@ -161,9 +157,8 @@ void HomeActivity::onEnter() {
   loadRecentBooks(metrics.homeRecentBooksCount, pinnedBookVisible ? PINNED_BOOK.getPinnedPath() : "");
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE
-                      ? 0
-                      : base + menuItemToIndex(initialMenuItem, hasOpdsServers, pinnedBookVisible);
+  selectorIndex =
+      initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, pinnedBookVisible);
 
   // Trigger first update
   requestUpdate();
@@ -222,7 +217,7 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasOpdsServers, pinnedBookVisible)) {
+    switch (indexToMenuItem(menuIndex, pinnedBookVisible)) {
       case HomeMenuItem::PINNED:
         onSelectBook(PINNED_BOOK.getPinnedPath());
         break;
@@ -232,11 +227,8 @@ void HomeActivity::loop() {
       case HomeMenuItem::RECENTS:
         onRecentsOpen();
         break;
-      case HomeMenuItem::OPDS_BROWSER:
-        onOpdsBrowserOpen();
-        break;
-      case HomeMenuItem::FILE_TRANSFER:
-        onFileTransferOpen();
+      case HomeMenuItem::TRANSFER_AND_SYNC:
+        onTransferAndSyncOpen();
         break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
@@ -349,14 +341,9 @@ void HomeActivity::render(RenderLock&&) {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_TRANSFER_AND_SYNC),
                                         tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
-
-  if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
-  }
 
   if (pinnedBookVisible) {
     // Pinned Book's selectorIndex slot (see indexToMenuItem) sits directly above the base menu
@@ -436,6 +423,12 @@ void HomeActivity::onRecentsOpen() {
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
-void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
-
-void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+void HomeActivity::onTransferAndSyncOpen() {
+  if (hasOpdsServers) {
+    activityManager.goToTransferAndSync();
+  } else {
+    // No OPDS servers configured -- go straight to File Transfer, the same one-tap experience
+    // this row replaced when there was nothing to pick between.
+    activityManager.goToFileTransfer();
+  }
+}

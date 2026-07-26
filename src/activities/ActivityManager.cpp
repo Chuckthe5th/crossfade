@@ -15,6 +15,7 @@
 #include "home/HomeActivity.h"
 #include "home/LibraryListActivity.h"
 #include "home/RecentBooksActivity.h"
+#include "home/TransferAndSyncActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "reader/ReaderActivity.h"
 #include "settings/LibraryIndexRebuildActivity.h"
@@ -229,6 +230,10 @@ void ActivityManager::goToBrowser() {
   }
 }
 
+void ActivityManager::goToTransferAndSync() {
+  replaceActivity(std::make_unique<TransferAndSyncActivity>(renderer, mappedInput));
+}
+
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh));
 }
@@ -251,10 +256,9 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
     } else if (activityName == "RecentBooks" || activityName == "CoverGridRecentBooks") {
       initialMenuItem = HomeMenuItem::RECENTS;
-    } else if (activityName == "OpdsBookBrowser") {
-      initialMenuItem = HomeMenuItem::OPDS_BROWSER;
-    } else if (activityName == "CrossPointWebServer") {
-      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
+    } else if (activityName == "OpdsBookBrowser" || activityName == "CrossPointWebServer" ||
+               activityName == "TransferAndSync") {
+      initialMenuItem = HomeMenuItem::TRANSFER_AND_SYNC;
     } else if (activityName == "Settings") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
