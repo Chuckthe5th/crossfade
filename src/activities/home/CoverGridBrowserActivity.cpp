@@ -290,7 +290,9 @@ int CoverGridBrowserActivity::hitTestCell(const int tx, const int ty) const {
     return -1;
   }
   const int pageStart = (selectedIndex / itemsPerPage) * itemsPerPage;
-  const int flatIndex = pageStart + (horizontalDirection() ? col * rows + row : row * cols + col);
+  // Row-major always -- left-to-right, top-to-bottom reading order regardless of which axis
+  // pagination advances along (see loop()'s primaryCount comment).
+  const int flatIndex = pageStart + row * cols + col;
   if (flatIndex >= currentCount()) {
     return -1;
   }
@@ -373,14 +375,20 @@ void CoverGridBrowserActivity::loop() {
 
   const int total = currentCount();
 
-  // Primary axis: side Up/Down in Vertical mode (primary count = cols, a "row"), front Left/Right
-  // in Horizontal mode (primary count = rows, a "column") -- whichever pair the fill order
-  // advances fastest across, so a full itemsPerPage continuous-hold jump lands exactly on the next
-  // page (see SETTINGS.coverGridDirection). Single step on release (matching FileBrowserActivity/
-  // RecentBooksActivity's release-edge convention for paginated lists); continuous hold reuses
-  // their exact nextPageIndex/previousPageIndex page-jump formula unchanged either way.
+  // Primary axis: side Up/Down in Vertical mode, front Left/Right in Horizontal mode (see
+  // SETTINGS.coverGridDirection) -- whichever pair holds-to-page-jump. Fill order is row-major
+  // always now (see hitTestCell), so the primary stride differs by mode: Vertical's Down/Up moves
+  // a full row at a time (primaryCount = cols) and flows across page boundaries seamlessly, same
+  // as before. Horizontal's Right/Left moves one cell at a time in reading order (primaryCount =
+  // 1) -- NOT rows: under row-major fill, a stride-of-rows step would skip cells sideways instead
+  // of landing on the adjacent column (verified: on a non-square grid, stepping from (row0,col1)
+  // with primaryCount=rows lands on (row0,col3), not (row0,col2)). At primaryCount=1 every "group"
+  // in stepPrimaryForward/Backward is a single cell, so the existing partial-last-page clamp
+  // degenerates to plain sequential wraparound -- no new derivation needed. Continuous hold reuses
+  // FileBrowserActivity/RecentBooksActivity's exact nextPageIndex/previousPageIndex formula
+  // unchanged either way, landing on the next page's first cell regardless of primaryCount.
   const bool horizontal = horizontalDirection();
-  const int primaryCount = horizontal ? rows : cols;
+  const int primaryCount = horizontal ? 1 : cols;
   const Button primaryForward = horizontal ? Button::Right : Button::Down;
   const Button primaryBackward = horizontal ? Button::Left : Button::Up;
   primaryNavigator.onRelease({primaryForward}, [this, primaryCount] {
@@ -400,21 +408,33 @@ void CoverGridBrowserActivity::loop() {
     requestUpdate();
   });
 
-  // Secondary axis: the other button pair, confined to the current row/column only. No stock list
-  // activity has a second axis to mirror a long-press convention from, so this is single-step
-  // only regardless of direction. Physical Up/Down and Left/Right always move the highlight
-  // visually up/down/left/right either way -- only which pair is primary (page-jumping) vs
-  // secondary (confined) swaps with the direction setting.
+  // Secondary axis: the other button pair, single-step only (no continuous/page-jump binding) --
+  // symmetric with the primary axis in that sense, just without holding-to-jump. Vertical mode's
+  // Left/Right stays confined to the current row (stepSecondary, unchanged). Horizontal mode's
+  // Up/Down now reuses stepPrimaryForward/Backward(cols) -- the exact formula Vertical's primary
+  // axis uses -- so it free-flows across row and page boundaries instead of staying locked to one
+  // column, which was only ever an artifact of the old column-major fill coupling.
   const Button secondaryForward = horizontal ? Button::Down : Button::Right;
   const Button secondaryBackward = horizontal ? Button::Up : Button::Left;
-  secondaryNavigator.onRelease({secondaryForward}, [this, primaryCount] {
-    selectedIndex = stepSecondary(1, primaryCount);
-    requestUpdate();
-  });
-  secondaryNavigator.onRelease({secondaryBackward}, [this, primaryCount] {
-    selectedIndex = stepSecondary(-1, primaryCount);
-    requestUpdate();
-  });
+  if (horizontal) {
+    secondaryNavigator.onRelease({secondaryForward}, [this] {
+      selectedIndex = stepPrimaryForward(cols);
+      requestUpdate();
+    });
+    secondaryNavigator.onRelease({secondaryBackward}, [this] {
+      selectedIndex = stepPrimaryBackward(cols);
+      requestUpdate();
+    });
+  } else {
+    secondaryNavigator.onRelease({secondaryForward}, [this] {
+      selectedIndex = stepSecondary(1, cols);
+      requestUpdate();
+    });
+    secondaryNavigator.onRelease({secondaryBackward}, [this] {
+      selectedIndex = stepSecondary(-1, cols);
+      requestUpdate();
+    });
+  }
 
   if (mappedInput.wasReleased(Button::Confirm)) {
     activateSelected();
@@ -548,14 +568,9 @@ void CoverGridBrowserActivity::drawStackOverlay(const int coverX, const int cove
 
 void CoverGridBrowserActivity::cellOrigin(const int flatIndex, const int pageStart, int& outX, int& outY) const {
   const int localIdx = flatIndex - pageStart;
-  int col, row;
-  if (horizontalDirection()) {
-    col = localIdx / rows;
-    row = localIdx % rows;
-  } else {
-    col = localIdx % cols;
-    row = localIdx / cols;
-  }
+  // Row-major always -- see hitTestCell's comment.
+  const int col = localIdx % cols;
+  const int row = localIdx / cols;
   outX = gridLeft + col * cellWidth;
   outY = gridTop + row * cellHeight;
 }
@@ -650,10 +665,10 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
                  headerTitle.empty() ? nullptr : headerTitle.c_str(), subtitle.empty() ? nullptr : subtitle.c_str());
 
   if (!entries.empty()) {
-    const bool horizontal = horizontalDirection();
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
-        const int flatIndex = pageStart + (horizontal ? c * rows + r : r * cols + c);
+        // Row-major always -- see hitTestCell's comment.
+        const int flatIndex = pageStart + r * cols + c;
         if (flatIndex >= static_cast<int>(entries.size())) {
           continue;
         }
