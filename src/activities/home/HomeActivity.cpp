@@ -146,11 +146,11 @@ void HomeActivity::onEnter() {
     // SETTINGS.hideButtonHints -- see UITheme::getMetrics()), so this naturally reflects whichever
     // state is currently active without a separate branch.
     const int availableBottom = renderer.getScreenHeight() - metrics.buttonHintsHeight;
-    // Safety margin, not measurement slack: Lyra Extended's real margin came out to ~4px in one
-    // configuration (OPDS + Pinned, hints hidden) -- too thin to trust exactly, so a close call is
-    // resolved by hiding the row rather than rendering a few pixels into the hints band.
-    constexpr int kFitSafetyBuffer = 16;
-    pinAvailable = (bottomEdge + kFitSafetyBuffer) <= availableBottom;
+    // Safety margin, not measurement slack -- per-theme (see ThemeMetrics::homePinnedRowFitBuffer):
+    // 16px by default (a close call is resolved by hiding the row rather than rendering a few
+    // pixels into the hints band), reduced only for themes whose real margin has been judged
+    // acceptable on-device (currently RoundedRaff -- see RoundedRaffMetrics's comment).
+    pinAvailable = (bottomEdge + metrics.homePinnedRowFitBuffer) <= availableBottom;
   }
   pinnedBookVisible = pinAvailable;
 

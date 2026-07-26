@@ -29,6 +29,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .homeRecentBooksCount = 1,
                                  .homeContinueReadingInMenu = false,
                                  .homeMenuTopOffset = 16,
+                                 // Lyra Extended's margin (OPDS + Pinned) is ~28px raw, ~12px after
+                                 // this buffer -- thinner than plain Lyra's ~70px, but not the
+                                 // razor's-edge case RoundedRaff has. Keep the default here; don't
+                                 // shrink it per RoundedRaff's precedent without re-checking this
+                                 // theme on-device.
+                                 .homePinnedRowFitBuffer = 16,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,

@@ -29,6 +29,18 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeRecentBooksCount = 1,
                                  .homeContinueReadingInMenu = true,
                                  .homeMenuTopOffset = 20,
+                                 // RoundedRaff always spends a menu row on Continue Reading (see
+                                 // homeContinueReadingInMenu above), unlike Lyra/Classic which use
+                                 // only the cover tile -- so it has one fewer row of headroom than
+                                 // the other themes at the same item count. With Pinned + OPDS
+                                 // configured, the real margin computes to ~3px raw (confirmed
+                                 // on-device, X3, screenHeight=792) -- the default 16px buffer
+                                 // would hide the row over that; 0 trusts the real geometry
+                                 // instead, scoped to this theme only. If this reads as visually
+                                 // cramped on-device, the actual fix is rendering Continue Reading
+                                 // as a tile (like the other themes) instead of loosening this
+                                 // further -- see HomeActivity fit-check history.
+                                 .homePinnedRowFitBuffer = 0,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
