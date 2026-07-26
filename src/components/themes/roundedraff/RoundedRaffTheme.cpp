@@ -243,6 +243,16 @@ void RoundedRaffTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int butt
   drawScrollBar(renderer, rect, buttonCount, pageStartIndex, pageItems);
 }
 
+int RoundedRaffTheme::getMenuBottomEdge(const GfxRenderer& renderer, const int menuTop, const int itemCount) const {
+  if (itemCount <= 0) return menuTop;
+  // Mirrors drawButtonMenu's rowHeight/rowStep formula above -- rowHeight is font-driven (the
+  // title font's real line height, not a fixed metrics constant), so this must call the same
+  // renderer.getLineHeight() rather than approximate it.
+  const int rowHeight = renderer.getLineHeight(kTitleFontId) + 20;  // 10px top + 10px bottom
+  const int rowStep = rowHeight + kSelectableRowGap;
+  return menuTop + (itemCount - 1) * rowStep + rowHeight;
+}
+
 void RoundedRaffTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
                                      int contentStartX, int contentWidth) const {
   const auto& metrics = UITheme::getInstance().getMetrics();

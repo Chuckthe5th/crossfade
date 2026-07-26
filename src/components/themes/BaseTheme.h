@@ -224,6 +224,12 @@ class BaseTheme {
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
+  // Y-coordinate of the bottom edge of the last of `itemCount` rows, if drawButtonMenu were asked
+  // to draw that many starting at `menuTop` -- i.e. the same per-row geometry drawButtonMenu
+  // itself uses (including any font-driven sizing, like RoundedRaff's title font line height),
+  // so a caller can check "would N items fit above Y" without reimplementing each theme's row
+  // offset math. Must be kept in sync with this theme's drawButtonMenu implementation above.
+  virtual int getMenuBottomEdge(const GfxRenderer& renderer, int menuTop, int itemCount) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                int selectedIndex) const;

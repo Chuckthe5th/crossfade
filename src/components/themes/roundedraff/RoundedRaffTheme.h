@@ -86,6 +86,7 @@ class RoundedRaffTheme : public BaseTheme {
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon) const override;
+  int getMenuBottomEdge(const GfxRenderer& renderer, int menuTop, int itemCount) const override;
   void drawTextField(const GfxRenderer& renderer, Rect rect, int textWidth, bool cursorMode = false,
                      int contentStartX = 0, int contentWidth = 0) const override;
   int getListRowStep(bool hasSubtitle) const override;

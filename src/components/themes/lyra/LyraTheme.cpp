@@ -582,3 +582,10 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     renderer.drawText(UI_12_FONT_ID, textX, textY, label, true);
   }
 }
+
+int LyraTheme::getMenuBottomEdge(const GfxRenderer&, const int menuTop, const int itemCount) const {
+  if (itemCount <= 0) return menuTop;
+  // Mirrors drawButtonMenu's tileRect.y formula above (no extra offset, unlike BaseTheme).
+  const auto& m = LyraMetrics::values;
+  return menuTop + (itemCount - 1) * (m.menuRowHeight + m.menuSpacing) + m.menuRowHeight;
+}

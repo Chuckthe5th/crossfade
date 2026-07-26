@@ -125,10 +125,39 @@ void HomeActivity::onEnter() {
   Activity::onEnter();
 
   hasOpdsServers = OPDS_STORE.hasServers();
-  pinnedBookVisible =
-      SETTINGS.pinBookToHome && PINNED_BOOK.hasPinned() && Storage.exists(PINNED_BOOK.getPinnedPath().c_str());
-
   const auto& metrics = UITheme::getInstance().getMetrics();
+
+  bool pinAvailable =
+      SETTINGS.pinBookToHome && PINNED_BOOK.hasPinned() && Storage.exists(PINNED_BOOK.getPinnedPath().c_str());
+  if (pinAvailable) {
+    // Continue Reading (in themes where it renders as its own menu row) needs at least one
+    // non-missing recent book to show at all -- independent of whether loadRecentBooks below ends
+    // up excluding the pinned path from that book, since the "show both" fallback means recentBooks
+    // ends up non-empty in exactly the same cases this loop does.
+    bool anyNonMissingRecent = false;
+    for (const auto& book : RECENT_BOOKS.getBooks()) {
+      if (!RecentBooksStore::isMissing(book)) {
+        anyNonMissingRecent = true;
+        break;
+      }
+    }
+    const int continueReadingRow = (metrics.homeContinueReadingInMenu && anyNonMissingRecent) ? 1 : 0;
+    const int totalFlatItems =
+        4 /* Browse, Recents, Transfer, Settings */ + (hasOpdsServers ? 1 : 0) + continueReadingRow + 1 /* Pinned */;
+    const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+    const int bottomEdge = GUI.getMenuBottomEdge(renderer, menuTop, totalFlatItems);
+    // metrics.buttonHintsHeight is already 0 when hints are hidden (touch device or
+    // SETTINGS.hideButtonHints -- see UITheme::getMetrics()), so this naturally reflects whichever
+    // state is currently active without a separate branch.
+    const int availableBottom = renderer.getScreenHeight() - metrics.buttonHintsHeight;
+    // Safety margin, not measurement slack: Lyra Extended's real margin came out to ~4px in one
+    // configuration (OPDS + Pinned, hints hidden) -- too thin to trust exactly, so a close call is
+    // resolved by hiding the row rather than rendering a few pixels into the hints band.
+    constexpr int kFitSafetyBuffer = 16;
+    pinAvailable = (bottomEdge + kFitSafetyBuffer) <= availableBottom;
+  }
+  pinnedBookVisible = pinAvailable;
+
   loadRecentBooks(metrics.homeRecentBooksCount, pinnedBookVisible ? PINNED_BOOK.getPinnedPath() : "");
 
   const auto base = static_cast<int>(recentBooks.size());

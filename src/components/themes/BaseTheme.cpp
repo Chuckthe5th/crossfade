@@ -723,6 +723,13 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
   }
 }
 
+int BaseTheme::getMenuBottomEdge(const GfxRenderer&, const int menuTop, const int itemCount) const {
+  if (itemCount <= 0) return menuTop;
+  // Mirrors drawButtonMenu's tileY formula above (extra verticalSpacing offset included).
+  const auto& m = BaseMetrics::values;
+  return m.verticalSpacing + menuTop + (itemCount - 1) * (m.menuRowHeight + m.menuSpacing) + m.menuRowHeight;
+}
+
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int marginX = metrics.popupMarginX;
