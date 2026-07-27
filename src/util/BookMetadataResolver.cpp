@@ -45,9 +45,10 @@ Result resolve(const std::string& path, const int coverWidth, const int coverHei
       result.author = epub.getAuthor();
       result.series = epub.getSeries();
       result.seriesIndex = epub.getSeriesIndex();
+      bool thumbCached = false;
       if (wantCover) {
         const std::string thumbPath = epub.getThumbBmpPath(coverWidth, coverHeight);
-        const bool thumbCached = Storage.exists(thumbPath.c_str());
+        thumbCached = Storage.exists(thumbPath.c_str());
         if (!thumbCached) {
           epub.generateThumbBmp(coverWidth, coverHeight);
           result.coverGenerated = true;
@@ -57,9 +58,11 @@ Result resolve(const std::string& path, const int coverWidth, const int coverHei
           result.hasCover = true;
         }
       }
-      LOG_DBG("BMR-PERF", "resolve EPUB \"%s\": bookBinCached=%d metadataResolveMs=%lu coverRequested=%d totalMs=%lu",
-              path.c_str(), wasCachedBook, static_cast<unsigned long>(metaMs), wantCover,
-              static_cast<unsigned long>(millis() - startMs));
+      LOG_DBG("BMR-PERF",
+              "resolve EPUB \"%s\": bookBinCached=%d metadataResolveMs=%lu coverRequested=%d coverWxH=%dx%d "
+              "thumbCached=%d coverGenerated=%d totalMs=%lu",
+              path.c_str(), wasCachedBook, static_cast<unsigned long>(metaMs), wantCover, coverWidth, coverHeight,
+              thumbCached, result.coverGenerated, static_cast<unsigned long>(millis() - startMs));
     } else {
       LOG_DBG("BMR-PERF", "resolve EPUB \"%s\": metadata FAILED, metadataResolveMs=%lu totalMs=%lu", path.c_str(),
               static_cast<unsigned long>(metaMs), static_cast<unsigned long>(millis() - startMs));
@@ -72,9 +75,10 @@ Result resolve(const std::string& path, const int coverWidth, const int coverHei
     if (loaded) {
       result.title = xtc.getTitle();
       result.author = xtc.getAuthor();
+      bool thumbCached = false;
       if (wantCover) {
         const std::string thumbPath = xtc.getThumbBmpPath(coverWidth, coverHeight);
-        const bool thumbCached = Storage.exists(thumbPath.c_str());
+        thumbCached = Storage.exists(thumbPath.c_str());
         if (!thumbCached) {
           xtc.setupCacheDir();
           xtc.generateThumbBmp(coverWidth, coverHeight);
@@ -85,8 +89,11 @@ Result resolve(const std::string& path, const int coverWidth, const int coverHei
           result.hasCover = true;
         }
       }
-      LOG_DBG("BMR-PERF", "resolve XTC \"%s\": headerLoadMs=%lu coverRequested=%d totalMs=%lu", path.c_str(),
-              static_cast<unsigned long>(loadMs), wantCover, static_cast<unsigned long>(millis() - startMs));
+      LOG_DBG("BMR-PERF",
+              "resolve XTC \"%s\": headerLoadMs=%lu coverRequested=%d coverWxH=%dx%d thumbCached=%d "
+              "coverGenerated=%d totalMs=%lu",
+              path.c_str(), static_cast<unsigned long>(loadMs), wantCover, coverWidth, coverHeight, thumbCached,
+              result.coverGenerated, static_cast<unsigned long>(millis() - startMs));
     }
   }
   // TXT/MD have no cover concept and no embedded metadata -- filename fallback below, no file open.

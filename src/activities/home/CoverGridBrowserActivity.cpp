@@ -16,14 +16,10 @@
 #include "activities/util/BookContextMenuActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/CoverGridGeometry.h"
 
 namespace {
-// Target cell size grid columns/rows are derived from at runtime -- never a
-// hardcoded panel width/height, so the same binary lays out correctly on X3
-// (792x528) and X4 (800x480).
-constexpr int TARGET_CELL_WIDTH = 140;
-constexpr int TARGET_CELL_HEIGHT = 190;
-constexpr int CARD_PADDING = 6;
+using CoverGridGeometry::CARD_PADDING;
 // Matches ButtonNavigator's own continuous-hold repeat interval -- a familiar
 // "still working" cadence -- rather than refreshing the panel once per cell.
 constexpr uint32_t PROGRESS_UPDATE_INTERVAL_MS = 500;
@@ -59,35 +55,21 @@ const std::vector<LibraryGrouping::Entry>& CoverGridBrowserActivity::currentEntr
 }
 
 void CoverGridBrowserActivity::computeGridGeometry() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
-  const int pageHeight = renderer.getScreenHeight();
-
-  int viewTop, viewRight, viewBottom, viewLeft;
-  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
-
-  gridTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  gridLeft = viewLeft;
-  const int gridWidth = pageWidth - viewLeft - viewRight;
-  const int gridBottom = pageHeight - viewBottom - metrics.buttonHintsHeight;
-  const int gridHeight = std::max(TARGET_CELL_HEIGHT, gridBottom - gridTop);
-
-  cols = std::max(2, gridWidth / TARGET_CELL_WIDTH);
-  cellWidth = gridWidth / cols;
-  rows = std::max(1, gridHeight / TARGET_CELL_HEIGHT);
-  cellHeight = gridHeight / rows;
-  itemsPerPage = cols * rows;
-
-  // With titles off, the caption row's space folds back into the cover box itself -- taller
-  // covers, not blank space -- which also means a different cache box size (see drawCell()'s
-  // Epub::generateThumbBmp(width, height) call): old with-titles thumbnails are simply never
-  // looked up at the new size, not explicitly invalidated.
-  const int titleAreaHeight = SETTINGS.coversShowTitles ? renderer.getLineHeight(SMALL_FONT_ID) + CARD_PADDING : 0;
-  coverHeight = std::max(20, cellHeight - CARD_PADDING * 2 - titleAreaHeight);
-  coverWidth = cellWidth - CARD_PADDING * 2;
+  const CoverGridGeometry::Geometry g = CoverGridGeometry::compute(renderer);
+  cols = g.cols;
+  rows = g.rows;
+  itemsPerPage = g.itemsPerPage;
+  cellWidth = g.cellWidth;
+  cellHeight = g.cellHeight;
+  coverWidth = g.coverWidth;
+  coverHeight = g.coverHeight;
+  gridLeft = g.gridLeft;
+  gridTop = g.gridTop;
 }
 
 void CoverGridBrowserActivity::loadBooks() {
+  LOG_DBG("GRID-PERF", "loadBooks: called (source=%d, previous topLevelEntries.size()=%u)", static_cast<int>(source),
+          static_cast<unsigned>(topLevelEntries.size()));
   topLevelEntries.clear();
   if (source == Source::RecentBooks) {
     // Mirrors RecentBooksActivity::onEnter(): prune entries whose backing files are gone before
@@ -133,11 +115,20 @@ void CoverGridBrowserActivity::ensurePageLoaded() {
   Rect popupRect;
   bool showingLoading = false;
   uint32_t lastProgressUpdateMs = 0;
+  int alreadyResolvedCount = 0;
+  int generatedCount = 0;
+  const uint32_t pageStartMs = millis();
   for (int i = pageStart; i < pageEnd; i++) {
+    const bool alreadyResolved =
+        !entries[i].title.empty() && (coverWidth <= 0 || coverHeight <= 0 || entries[i].hasCover);
+    if (alreadyResolved) {
+      alreadyResolvedCount++;
+    }
     const bool generated = LibraryGrouping::resolvePage(entries, i, i + 1, coverWidth, coverHeight);
     if (!generated) {
       continue;
     }
+    generatedCount++;
     const uint32_t nowMs = millis();
     if (!showingLoading) {
       showingLoading = true;
@@ -149,6 +140,11 @@ void CoverGridBrowserActivity::ensurePageLoaded() {
       lastProgressUpdateMs = nowMs;
     }
   }
+  LOG_DBG("GRID-PERF",
+          "ensurePageLoaded: pageStart=%d cellCount=%d alreadyResolved=%d generated=%d popupShown=%d "
+          "coverWxH=%dx%d totalMs=%lu",
+          pageStart, count, alreadyResolvedCount, generatedCount, showingLoading, coverWidth, coverHeight,
+          static_cast<unsigned long>(millis() - pageStartMs));
 
   loadedPageStart = pageStart;
 }

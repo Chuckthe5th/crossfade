@@ -5,9 +5,11 @@
 
 #include <string>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/CoverGridGeometry.h"
 
 namespace {
 constexpr uint32_t PROGRESS_MIN_INTERVAL_MS = 1000;
@@ -53,12 +55,26 @@ void LibraryIndexRebuildActivity::finishOrContinue() {
 }
 
 void LibraryIndexRebuildActivity::beginBuild() {
+  // Only pre-render covers for the view that will actually show them -- Titles view never draws
+  // one, so a Titles-only user shouldn't pay for cover generation during their rebuild. Computed
+  // live off the running renderer/theme/settings (see CoverGridGeometry), never hardcoded, so a
+  // pre-rendered thumbnail always matches exactly what CoverGridBrowserActivity will look up on
+  // this device.
+  int coverWidth = 0;
+  int coverHeight = 0;
+  if (SETTINGS.fileBrowserView == CrossPointSettings::FILE_BROWSER_COVERS) {
+    const CoverGridGeometry::Geometry g = CoverGridGeometry::compute(renderer);
+    coverWidth = g.coverWidth;
+    coverHeight = g.coverHeight;
+  }
+
   // The delta scan itself (LibraryScanner's directory walk + a fingerprint compare, no OPF/XTC
   // parsing) runs before any popup: it's cheap enough that showing "Building..." unconditionally
   // first -- as this used to do -- meant every single auto-triggered entry into a grouped
   // Covers/Titles view flashed the popup even when nothing had changed and zero parsing was about
   // to happen. Only show it once begin() has actually found real work.
-  builder.begin();
+  builder.begin(coverWidth, coverHeight);
+  metadataCommitted = false;
   if (builder.upToDate()) {
     // Up to date costs nothing to detect -- auto mode continues immediately rather than showing a
     // screen for the common case where there was never anything to wait for. Manual mode still
@@ -80,8 +96,12 @@ void LibraryIndexRebuildActivity::beginBuild() {
 }
 
 void LibraryIndexRebuildActivity::maybeRequestProgressUpdate() {
-  const int total = builder.totalCount();
-  const int percent = total > 0 ? (builder.resolvedCount() * 100 / total) : 100;
+  // Combined across both phases (pending-book metadata + cover backfill) from the start, rather
+  // than resetting to 0% when the cover phase begins -- both totals are already known after
+  // begin(), so the bar just keeps advancing smoothly through the whole build.
+  const int total = builder.totalCount() + builder.totalCoverCount();
+  const int resolved = builder.resolvedCount() + builder.resolvedCoverCount();
+  const int percent = total > 0 ? (resolved * 100 / total) : 100;
   const uint32_t nowMs = millis();
   const bool timeElapsed = (nowMs - lastPopupUpdateMs) >= PROGRESS_MIN_INTERVAL_MS;
   const bool percentAdvanced = (percent - lastPopupPercent) >= PROGRESS_MIN_PERCENT_STEP;
@@ -108,7 +128,12 @@ void LibraryIndexRebuildActivity::loop() {
     // an edge. A held press is still caught because isPressed() reflects whatever the debounced
     // state was at the last sample, not a one-shot event that resets before the next check.
     if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
-      builder.cancel();
+      // Once metadata is committed, the pending-book phase's work is already safely on disk --
+      // only cover backfill (if any) remains, and abandoning it is harmless: whatever's still
+      // missing simply gets picked up again, cheaply, on a future rebuild's carriedOver scan.
+      if (!metadataCommitted) {
+        builder.cancel();
+      }
       // Auto mode continues immediately (see beginBuild()'s up-to-date case for the same
       // reasoning) -- the destination view falls back to ungrouped rendering on its own when no
       // valid index exists, so there's nothing further this screen needs to communicate.
@@ -123,15 +148,35 @@ void LibraryIndexRebuildActivity::loop() {
     if (builder.hasWork()) {
       builder.step();
       maybeRequestProgressUpdate();
-    } else {
+      return;
+    }
+    if (!metadataCommitted) {
       const bool ok = builder.commit();
-      if (isAutoMode()) {
-        finishOrContinue();
+      metadataCommitted = true;
+      if (!ok) {
+        if (isAutoMode()) {
+          finishOrContinue();
+          return;
+        }
+        state = FAILED;
+        requestUpdate();
         return;
       }
-      state = ok ? SUCCESS : FAILED;
-      requestUpdate();
     }
+    // Cover backfill: entries carried over unchanged (so never touched by step() above) that
+    // begin() found missing a thumbnail at the current grid size -- see LibraryIndexBuilder's
+    // class comment. Empty whenever beginBuild() didn't request cover work (Titles view).
+    if (builder.hasCoverWork()) {
+      builder.stepCover();
+      maybeRequestProgressUpdate();
+      return;
+    }
+    if (isAutoMode()) {
+      finishOrContinue();
+      return;
+    }
+    state = SUCCESS;
+    requestUpdate();
     return;
   }
 
@@ -171,8 +216,8 @@ void LibraryIndexRebuildActivity::render(RenderLock&&) {
       // beginBuild()), so totalCount()/resolvedCount() are meaningful from the very first tick.
       return;
     }
-    const int total = builder.totalCount();
-    const int percent = total > 0 ? (builder.resolvedCount() * 100 / total) : 100;
+    const int total = builder.totalCount() + builder.totalCoverCount();
+    const int percent = total > 0 ? ((builder.resolvedCount() + builder.resolvedCoverCount()) * 100 / total) : 100;
     GUI.fillPopupProgress(renderer, popupRect, percent);
     return;
   }

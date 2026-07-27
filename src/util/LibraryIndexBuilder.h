@@ -17,6 +17,15 @@
 // no OPF/XTC parsing. Only step() -- called once per pending (new or changed) book -- does real
 // parsing work, so the visible cost of a rebuild scales with what actually changed, not with
 // library size.
+//
+// Optionally also pre-renders cover thumbnails at a caller-given size (see begin()), so
+// CoverGridBrowserActivity never has to generate one at page-turn time. This has its own delta:
+// pending books get their cover generated for free as part of the same BookMetadataResolver::
+// resolve() call step() already makes for their metadata; carriedOver books (metadata unchanged,
+// never touched by step()) get a cheap per-book "does a thumbnail already exist at this size"
+// check in begin(), and only the ones missing one are queued for stepCover(). A book that already
+// has its cover cached -- the common case after the first rebuild following a cover-size change
+// -- costs one Storage.exists() stat, not a re-parse.
 class LibraryIndexBuilder {
  public:
   explicit LibraryIndexBuilder(std::string indexPath) : indexPath(std::move(indexPath)) {}
@@ -24,7 +33,13 @@ class LibraryIndexBuilder {
   // Scans the library and computes the delta against the on-disk index (if any): unchanged
   // entries (matching path + size + fatDateTime) are carried over verbatim; new or changed paths
   // become pending. Call once before stepping.
-  void begin();
+  //
+  // Pass coverWidth/coverHeight > 0 to also pre-render cover thumbnails at that exact size (see
+  // class comment) -- callers should compute these live via CoverGridGeometry::compute(), never a
+  // hardcoded/assumed size, so pre-rendered thumbnails match what the grid will actually look up
+  // on this device. Pass 0, 0 (the default) to skip cover work entirely, matching the previous
+  // metadata-only behavior.
+  void begin(int coverWidth = 0, int coverHeight = 0);
 
   bool hasWork() const { return nextPendingIndex < pending.size(); }
   // Scoped to pending (parse-needed) work only -- carried-over entries cost no visible time, so
@@ -32,19 +47,35 @@ class LibraryIndexBuilder {
   int totalCount() const { return static_cast<int>(pending.size()); }
   int resolvedCount() const { return static_cast<int>(nextPendingIndex); }
 
-  // Resolves exactly one pending book (title/author/series via BookMetadataResolver, no cover
-  // work). Returns true if more work remains, false once every pending book has been resolved.
-  // A no-op returning false if called with hasWork() already false.
+  // Resolves exactly one pending book (title/author/series via BookMetadataResolver, plus its
+  // cover if begin() was given a non-zero size). Returns true if more work remains, false once
+  // every pending book has been resolved. A no-op returning false if called with hasWork() already
+  // false.
   bool step();
 
-  // True if begin() found nothing to change: the on-disk index already matches the scanned
-  // library (or the library is unreadable/empty and no index exists to build). Callers can skip
-  // showing a build UI entirely in this case -- there is nothing to wait for.
-  bool upToDate() const { return !dirty; }
+  // The cover-backfill phase: only carriedOver entries found missing a thumbnail in begin() --
+  // see class comment. Meaningless (always empty) if begin() was called with coverWidth/
+  // coverHeight == 0. Intended to run after step()'s pending-book phase is exhausted.
+  bool hasCoverWork() const { return nextCoverBackfillIndex < coverBackfill.size(); }
+  int totalCoverCount() const { return static_cast<int>(coverBackfill.size()); }
+  int resolvedCoverCount() const { return static_cast<int>(nextCoverBackfillIndex); }
+
+  // Generates exactly one missing cover for a carriedOver entry queued by begin(). Returns true if
+  // more cover work remains, false once every queued cover has been generated. Does not touch
+  // title/author/series -- carriedOver's are already correct and untouched by this call. A no-op
+  // returning false if called with hasCoverWork() already false.
+  bool stepCover();
+
+  // True if begin() found nothing to change and no cover backfill is needed: the on-disk index
+  // already matches the scanned library and every book already has a cover cached at the
+  // requested size (or the library is unreadable/empty and no index exists to build). Callers can
+  // skip showing a build UI entirely in this case -- there is nothing to wait for.
+  bool upToDate() const { return !dirty && !hasCoverWork(); }
 
   // Persists carriedOver + all step()-resolved entries atomically (LibraryIndex::save). Call once
-  // hasWork() is false. A no-op (returns true without writing) when upToDate() -- the on-disk
-  // index already matches, so there is nothing to persist.
+  // hasWork() is false -- independent of hasCoverWork(), since cover backfill never changes index
+  // content, only thumbnail files on disk. A no-op (returns true without writing) when dirty is
+  // false -- the on-disk index already matches, so there is nothing to persist.
   bool commit();
 
   // Discards all in-progress work without touching the on-disk index at all -- an existing index,
@@ -62,6 +93,12 @@ class LibraryIndexBuilder {
   std::vector<LibraryScanner::Entry> pending;    // paths needing (re)resolve, fingerprint carried through
   std::vector<LibraryIndex::Entry> resolved;     // step() results, appended in pending order
   size_t nextPendingIndex = 0;
+  // Indices into carriedOver found missing a cover at coverWidth/coverHeight by begin() -- empty
+  // whenever begin() was called with coverWidth/coverHeight == 0.
+  std::vector<size_t> coverBackfill;
+  size_t nextCoverBackfillIndex = 0;
+  int coverWidth = 0;
+  int coverHeight = 0;
   uint32_t startMs = 0;
   // Set by begin() when the on-disk index doesn't already match the scanned library exactly --
   // either something needs (re)parsing (pending non-empty) or an old entry was dropped (a

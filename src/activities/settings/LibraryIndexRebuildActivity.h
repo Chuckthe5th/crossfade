@@ -63,6 +63,10 @@ class LibraryIndexRebuildActivity final : public Activity {
   int lastPopupPercent = -1;
   bool popupShown = false;
   Rect popupRect{0, 0, 0, 0};
+  // True once commit() has run this build -- distinguishes "cancel during the pending-book phase"
+  // (discard in-progress work via builder.cancel()) from "cancel during cover backfill" (metadata
+  // is already persisted; abandoning remaining covers is harmless, see loop()).
+  bool metadataCommitted = false;
 
   bool isAutoMode() const { return static_cast<bool>(onDone); }
   // Manual mode: returns to the caller via the activity stack. Auto mode: continues to whatever
