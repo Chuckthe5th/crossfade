@@ -114,10 +114,16 @@ void OtaUpdateActivity::render(RenderLock&&) {
   if (state == CHECKING_FOR_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_CHECKING_UPDATE));
   } else if (state == WAITING_CONFIRMATION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEW_UPDATE), true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height + metrics.verticalSpacing,
+    // confirmPopup is vertically centered on the screen (see OptionPopup::getLayout), same as
+    // every other confirmation dialog. This block is 3 lines instead of the usual 1, so instead of
+    // starting at center like the other single-line states here, anchor it to end 20px above
+    // center -- the same clearance LibraryIndexRebuildActivity's WARNING text uses above its own
+    // confirmPopup -- so the popup doesn't cover it.
+    const auto infoTop = pageHeight / 2 - 20 - (height * 2 + metrics.verticalSpacing * 2);
+    renderer.drawCenteredText(UI_10_FONT_ID, infoTop, tr(STR_NEW_UPDATE), true, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, infoTop + height + metrics.verticalSpacing,
                       (std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height * 2 + metrics.verticalSpacing * 2,
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, infoTop + height * 2 + metrics.verticalSpacing * 2,
                       (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
 
     if (confirmPopup.processRender(renderer, mappedInput)) return;
