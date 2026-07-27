@@ -23,6 +23,21 @@ class OtaUpdater {
     OOM_ERROR,
   };
 
+ private:
+  // Bridges installUpdate()'s caller-supplied (void* ctx)-only ProgressCallback across into
+  // firmware_flash::flashFromSdPath()'s (written, total, ctx) callback shape during the
+  // validate+flash+switch phase, and updates processedSize/totalSize from it so
+  // getProcessedSize()/getTotalSize() stay accurate for that phase the same way they already are
+  // for the download phase.
+  struct ProgressBridge {
+    OtaUpdater* self;
+    ProgressCallback userCallback;
+    void* userCtx;
+    int lastReportedPct;
+  };
+  static void onFlashProgress(size_t written, size_t total, void* ctx);
+
+ public:
   size_t getOtaSize() const { return otaSize; }
 
   size_t getProcessedSize() const { return processedSize; }

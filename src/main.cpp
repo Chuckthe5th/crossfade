@@ -16,6 +16,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <esp_ota_ops.h>
 
 #include <cstring>
 
@@ -456,6 +457,20 @@ void setup() {
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
   allowSleepAt = millis() + 2000;
+
+  // Confirms this boot as good to a rollback-aware bootloader's otadata state machine (harmless
+  // no-op if this partition is already marked valid, or if the currently-flashed bootloader
+  // doesn't have CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE at all -- see the platformio.ini comment
+  // next to that option for why enabling it here doesn't retroactively reach already-deployed
+  // bootloaders). Skipped on the one boot that's reporting a panic from the previous run, so a
+  // repeatedly-crashing image stays eligible for the bootloader to revert automatically instead
+  // of getting confirmed valid on the very boot where we know something went wrong.
+  if (!HalSystem::isRebootFromPanic()) {
+    const esp_err_t rollbackErr = esp_ota_mark_app_valid_cancel_rollback();
+    if (rollbackErr != ESP_OK) {
+      LOG_DBG("MAIN", "esp_ota_mark_app_valid_cancel_rollback: %s", esp_err_to_name(rollbackErr));
+    }
+  }
 }
 
 void loop() {
