@@ -4,7 +4,6 @@
 
 #include <algorithm>
 
-#include "CrossPointSettings.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -40,11 +39,11 @@ Geometry compute(GfxRenderer& renderer) {
   g.cellHeight = gridHeight / g.rows;
   g.itemsPerPage = g.cols * g.rows;
 
-  // With titles off, the caption row's space folds back into the cover box itself -- taller
-  // covers, not blank space -- which also means a different cache box size (see drawCell()'s
-  // Epub::generateThumbBmp(width, height) call): old with-titles thumbnails are simply never
-  // looked up at the new size, not explicitly invalidated.
-  const int titleAreaHeight = SETTINGS.coversShowTitles ? renderer.getLineHeight(SMALL_FONT_ID) + CARD_PADDING : 0;
+  // Reserves room for drawCell()'s caption below the cover -- titles are always drawn, so this is
+  // unconditional. Keeping it a fixed part of the formula (rather than a toggle) matters for the
+  // pre-render in LibraryIndexBuilder: one size, always, means the rebuild and the grid can never
+  // disagree on what to look up.
+  const int titleAreaHeight = renderer.getLineHeight(SMALL_FONT_ID) + CARD_PADDING;
   g.coverHeight = std::max(20, g.cellHeight - CARD_PADDING * 2 - titleAreaHeight);
   g.coverWidth = g.cellWidth - CARD_PADDING * 2;
 

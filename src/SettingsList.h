@@ -261,8 +261,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_BROWSE_BOOKS_START_IN_SERIES, &CrossPointSettings::browseBooksStartInSeries,
                             "browseBooksStartInSeries", StrId::STR_CAT_SYSTEM),
-        SettingInfo::Toggle(StrId::STR_COVERS_SHOW_TITLES, &CrossPointSettings::coversShowTitles, "coversShowTitles",
-                            StrId::STR_CAT_SYSTEM),
         SettingInfo::Enum(StrId::STR_COVER_GRID_DIRECTION, &CrossPointSettings::coverGridDirection,
                           {StrId::STR_COVER_GRID_DIRECTION_VERTICAL, StrId::STR_COVER_GRID_DIRECTION_HORIZONTAL},
                           "coverGridDirection", StrId::STR_CAT_SYSTEM),

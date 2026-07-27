@@ -294,12 +294,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // off rather than showing a toggle with nothing to gate. A last-read book that isn't in any
   // series is unaffected either way -- it's a top-level entry regardless of this setting.
   uint8_t browseBooksStartInSeries = 1;
-  // Show each cell's title caption in the Covers grid (fileBrowserView/recentBooksView ==
-  // *_COVERS). Off reclaims the caption's vertical space to draw a taller cover instead --
-  // changes the thumbnail cache's cell size, so it regenerates at the new size rather than
-  // reusing anything cached for the with-titles layout (see Epub::getThumbBmpPath(w, h)).
-  // Default on, matching the grid's original behavior.
-  uint8_t coversShowTitles = 1;
   // Cover grid pagination direction: COVER_GRID_VERTICAL (default) or COVER_GRID_HORIZONTAL --
   // see the COVER_GRID_DIRECTION enum above. Applies to both Browse Books and Recent Books, since
   // both use the same CoverGridBrowserActivity navigation code.

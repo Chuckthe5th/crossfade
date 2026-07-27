@@ -517,7 +517,7 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
     drawStackOverlay(innerX, innerY, innerW, coverHeight);
   }
 
-  if (SETTINGS.coversShowTitles && !title.empty()) {
+  if (!title.empty()) {
     const std::string truncated = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), innerW);
     renderer.drawText(SMALL_FONT_ID, innerX, innerY + coverHeight + CARD_PADDING, truncated.c_str());
   }
