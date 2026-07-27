@@ -20,6 +20,7 @@
 
 namespace {
 using CoverGridGeometry::CARD_PADDING;
+using CoverGridGeometry::SERIES_STRIP_WIDTH;
 // Matches ButtonNavigator's own continuous-hold repeat interval -- a familiar
 // "still working" cadence -- rather than refreshing the panel once per cell.
 constexpr uint32_t PROGRESS_UPDATE_INTERVAL_MS = 500;
@@ -463,8 +464,8 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   const int innerX = x + CARD_PADDING;
   const int innerY = y + CARD_PADDING;
   // Same value LibraryGrouping::resolvePage() generated the cached thumbnail at (coverWidth is
-  // computed once in computeGridGeometry() as cellWidth - CARD_PADDING * 2), so a cache hit needs
-  // no rescale in drawBitmap1Bit below.
+  // computed once in computeGridGeometry() as cellWidth - CARD_PADDING * 2 - SERIES_STRIP_WIDTH),
+  // so a cache hit needs no rescale in drawBitmap1Bit below.
   const int innerW = coverWidth;
 
   // Blank this cell's full bounds first. drawCell can run without a preceding
@@ -502,24 +503,32 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
     }
   }
 
-  // The outlined/filled card is the no-cover fallback only -- a cell with a real
-  // cover gets no frame around it. A series entry with no cover falls back to the exact same card,
-  // with the stack overlay layered on top of it identically to the real-cover case below.
+  // The outlined/filled card is the no-cover fallback only -- a cell with a real cover gets no
+  // frame around it. Titles are never drawn over a real cover (the selected book's title already
+  // shows in the header, making a per-cell caption redundant) -- but a coverless entry has nothing
+  // else identifying it, so the fallback card carries its own centered title, drawn inverted
+  // (white-on-black) when selected since the card itself is filled solid black then.
   if (!drewCover) {
     if (selected) {
       renderer.fillRect(innerX, innerY, innerW, coverHeight);
     } else {
       renderer.drawRect(innerX, innerY, innerW, coverHeight);
     }
+    if (!title.empty()) {
+      const int textMaxWidth = innerW - CARD_PADDING * 2;
+      const std::string truncated = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), textMaxWidth);
+      const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+      const int textX = innerX + CARD_PADDING;
+      const int textY = innerY + (coverHeight - lineHeight) / 2;
+      renderer.drawText(SMALL_FONT_ID, textX, textY, truncated.c_str(), /*black=*/!selected);
+    }
   }
 
   if (haveData && entries[flatIndex].isSeries) {
-    drawStackOverlay(innerX, innerY, innerW, coverHeight);
-  }
-
-  if (!title.empty()) {
-    const std::string truncated = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), innerW);
-    renderer.drawText(SMALL_FONT_ID, innerX, innerY + coverHeight + CARD_PADDING, truncated.c_str());
+    // Strip sits immediately right of the cover box, inside the CARD_PADDING-bounded space
+    // CoverGridGeometry::compute() already reserved via SERIES_STRIP_WIDTH -- see its comment.
+    const int stripX = innerX + innerW;
+    drawStackOverlay(stripX, innerY, SERIES_STRIP_WIDTH, coverHeight);
   }
 
   if (selected) {
@@ -527,34 +536,34 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
   }
 }
 
-void CoverGridBrowserActivity::drawStackOverlay(const int coverX, const int coverY, const int coverW,
-                                                const int coverH) const {
+void CoverGridBrowserActivity::drawStackOverlay(const int stripX, const int stripY, const int stripW,
+                                                const int stripH) const {
   // Three lines ordered inner-to-outer by height (inner = full height, outer = shortest, nearest
-  // the cover's right edge), all vertically centered on the cover's own midpoint -- evoking a
-  // stack of books peeking out from behind the front cover. An inset overlay drawn on top of
-  // whatever's already in the box (real cover art or the no-cover fallback card) -- not a reserved
-  // layout strip, so cell/cache geometry never changes. Each line gets its own 1px white halo
-  // drawn first (rather than relying on an already-blank background, the way the selection ring
-  // below does) since real cover art under it isn't guaranteed to be light.
+  // the strip's right edge), all vertically centered on the cover's own midpoint (stripY/stripH
+  // match the cover box exactly -- see the call site) -- evoking a stack of books peeking out from
+  // behind the front cover. Drawn in the reserved strip beside the cover, never over it, so unlike
+  // the old on-cover overlay this never needs a halo against unpredictable cover art -- the
+  // strip's background is always blank. Tightened spacing (vs. the old overlay) since
+  // SERIES_STRIP_WIDTH is a fixed cost paid by every cell, series or not -- but the innermost
+  // line's left edge must still clear stripX+1: the selected-cell ring (see drawCell) is drawn
+  // 2px past the cover box, landing on the strip's first two columns.
   constexpr int strokeWidth = 2;
-  constexpr int lineGap = 3;              // horizontal gap between adjacent lines
-  constexpr int outerInsetFromRight = 4;  // the outermost line's distance from the cover's right edge
+  constexpr int lineGap = 2;              // horizontal gap between adjacent lines
+  constexpr int outerInsetFromRight = 2;  // the outermost line's distance from the strip's right edge
   constexpr int topBottomMargin = 4;      // the inner (full-height) line's clearance from top/bottom
-  constexpr int haloPad = 1;
-  const int rightEdge = coverX + coverW;
-  const int midY = coverY + coverH / 2;
+  const int rightEdge = stripX + stripW;
+  const int midY = stripY + stripH / 2;
 
   const int outerX = rightEdge - outerInsetFromRight - strokeWidth;
   const int middleX = outerX - lineGap - strokeWidth;
   const int innerX = middleX - lineGap - strokeWidth;
 
-  const int innerHeight = coverH - topBottomMargin * 2;
-  const int middleHeight = coverH * 87 / 100;
-  const int outerHeight = coverH * 75 / 100;
+  const int innerHeight = stripH - topBottomMargin * 2;
+  const int middleHeight = stripH * 87 / 100;
+  const int outerHeight = stripH * 75 / 100;
 
   const auto drawLine = [this](const int x, const int centerY, const int height) {
     const int y = centerY - height / 2;
-    renderer.fillRect(x - haloPad, y - haloPad, strokeWidth + haloPad * 2, height + haloPad * 2, false);
     renderer.fillRect(x, y, strokeWidth, height, true);
   };
   drawLine(innerX, midY, innerHeight);

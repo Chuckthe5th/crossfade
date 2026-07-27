@@ -5,7 +5,6 @@
 #include <algorithm>
 
 #include "components/UITheme.h"
-#include "fontIds.h"
 
 namespace CoverGridGeometry {
 
@@ -39,13 +38,14 @@ Geometry compute(GfxRenderer& renderer) {
   g.cellHeight = gridHeight / g.rows;
   g.itemsPerPage = g.cols * g.rows;
 
-  // Reserves room for drawCell()'s caption below the cover -- titles are always drawn, so this is
-  // unconditional. Keeping it a fixed part of the formula (rather than a toggle) matters for the
-  // pre-render in LibraryIndexBuilder: one size, always, means the rebuild and the grid can never
-  // disagree on what to look up.
-  const int titleAreaHeight = renderer.getLineHeight(SMALL_FONT_ID) + CARD_PADDING;
-  g.coverHeight = std::max(20, g.cellHeight - CARD_PADDING * 2 - titleAreaHeight);
-  g.coverWidth = g.cellWidth - CARD_PADDING * 2;
+  // No caption row -- titles are never drawn over a real cover (only on the no-cover fallback
+  // card, inside its own box -- see CoverGridBrowserActivity::drawCell), so the cover fills the
+  // full cell height.
+  g.coverHeight = std::max(20, g.cellHeight - CARD_PADDING * 2);
+  // SERIES_STRIP_WIDTH is reserved on every cell regardless of whether its entry is a series, so
+  // there's still exactly one cover size for the pre-render and the grid to agree on -- just
+  // narrower than the full cell width by that fixed strip.
+  g.coverWidth = std::max(20, g.cellWidth - CARD_PADDING * 2 - SERIES_STRIP_WIDTH);
 
   return g;
 }
