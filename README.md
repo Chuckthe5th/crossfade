@@ -114,7 +114,7 @@ The build artifact is `firmware.bin`, which you flash via the web flasher's Cust
 
 CrossFade uses CrossPoint's standard `.crosspoint` SD-card folder, so switching between the two firmwares does not lose your covers, caches, or reading positions. Its own settings and cache files carry a fork marker so they can't be confused with upstream's, and settings are stored separately (`crossfade-settings.json`) so the two firmwares don't overwrite each other's preferences.
 
-The over-the-air update check is currently disabled in CrossFade, so devices will not attempt to update themselves. Update by flashing a new release manually.
+CrossFade checks Chuckthe5th/crossfade releases for over-the-air updates and can install them directly, with rollback if a bad flash fails to boot. You can also update at any time by flashing a new release manually.
 
 ---
 
