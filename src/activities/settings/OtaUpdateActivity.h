@@ -1,6 +1,7 @@
 #pragma once
 
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "network/OtaUpdater.h"
 
 class OtaUpdateActivity : public Activity {
@@ -21,6 +22,12 @@ class OtaUpdateActivity : public Activity {
   State state = WIFI_SELECTION;
   unsigned int lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
   OtaUpdater updater;
+  // Cancel/Update choice for WAITING_CONFIRMATION -- the same OptionPopup every other
+  // confirmation dialog uses (see ConfirmationActivity, LibraryIndexRebuildActivity's WARNING
+  // state), so button placement and the physical-button mapping (Back always cancels/dismisses,
+  // Confirm selects whichever option is currently highlighted, Up/Down/Left/Right toggle between
+  // them) match the rest of the firmware instead of this activity's own bespoke touch-zone layout.
+  OptionPopup confirmPopup;
 
   void onWifiSelectionComplete(bool success);
   void runUpdateInstall();
