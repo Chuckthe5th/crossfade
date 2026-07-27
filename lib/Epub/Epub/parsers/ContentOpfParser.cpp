@@ -5,6 +5,7 @@
 #include <Serialization.h>
 #include <XmlParserUtils.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 
@@ -15,6 +16,23 @@ constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
 constexpr char MEDIA_TYPE_IMAGE_PREFIX[] = "image/";
 constexpr char itemCacheFile[] = "/.items.bin";
+
+// Appends up to `len` bytes of `s` into `dest`, never growing `dest` past
+// ContentOpfParser::MAX_ACCUMULATED_FIELD_LEN -- std::string::append's internal growth
+// (_M_create et al.) lives in a prebuilt libstdc++ that still has real exception support, while
+// this project's own code compiles -fno-exceptions and has no handler for it, so an unbounded
+// append that fails to allocate throws std::bad_alloc/length_error uncaught, aborting the whole
+// device rather than failing this one book gracefully. Once the cap is hit, a field simply stops
+// growing (keeping whatever was accumulated so far, not discarding it) instead of continuing to
+// append. Returns true if `dest` is at the cap after this call, so the caller can flag it for a
+// once-per-book diagnostic log rather than re-checking on every subsequent XML chunk.
+bool appendBounded(std::string& dest, const char* s, const int len) {
+  constexpr size_t cap = ContentOpfParser::MAX_ACCUMULATED_FIELD_LEN;
+  if (len > 0 && dest.size() < cap) {
+    dest.append(s, std::min(static_cast<size_t>(len), cap - dest.size()));
+  }
+  return dest.size() >= cap;
+}
 
 // Parses a decimal series index, tolerating fractional values (e.g. "1.5" for a novella).
 // Returns -1.0f (the "no index" sentinel) if the text isn't a valid number.
@@ -392,25 +410,25 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
   auto* self = static_cast<ContentOpfParser*>(userData);
 
   if (self->state == IN_BOOK_TITLE) {
-    self->title.append(s, len);
+    if (appendBounded(self->title, s, len)) self->titleTruncated = true;
     return;
   }
 
   if (self->state == IN_BOOK_AUTHOR) {
     if (!self->author.empty()) {
-      self->author.append(", ");  // Add separator for multiple authors
+      self->author.append(", ");  // Add separator for multiple authors -- fixed 2 bytes, no cap needed
     }
-    self->author.append(s, len);
+    if (appendBounded(self->author, s, len)) self->authorTruncated = true;
     return;
   }
 
   if (self->state == IN_BOOK_LANGUAGE) {
-    self->language.append(s, len);
+    if (appendBounded(self->language, s, len)) self->languageTruncated = true;
     return;
   }
 
   if (self->state == IN_META_TEXT) {
-    self->pendingMetaText.append(s, len);
+    if (appendBounded(self->pendingMetaText, s, len)) self->metaTextTruncated = true;
     return;
   }
 }

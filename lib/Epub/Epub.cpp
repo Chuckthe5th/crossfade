@@ -74,6 +74,16 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
     return false;
   }
 
+  if (opfParser.titleTruncated || opfParser.authorTruncated || opfParser.languageTruncated ||
+      opfParser.metaTextTruncated) {
+    LOG_ERR("EBP",
+            "\"%s\": metadata field(s) hit the %u-byte accumulation cap and were truncated -- title=%d "
+            "author=%d language=%d seriesMeta=%d",
+            filepath.c_str(), static_cast<unsigned>(ContentOpfParser::MAX_ACCUMULATED_FIELD_LEN),
+            opfParser.titleTruncated, opfParser.authorTruncated, opfParser.languageTruncated,
+            opfParser.metaTextTruncated);
+  }
+
   // Grab data from opfParser into epub. Normalize titles to NFC so NFD (combining
   // mark) text renders correctly — the device fonts have no mark positioning.
   bookMetadata.title = utf8ComposeNfc(opfParser.title);

@@ -83,6 +83,22 @@ class ContentOpfParser final : public Print {
   static void endElement(void* userData, const XML_Char* name);
 
  public:
+  // Real book titles/authors/languages/series metadata are always well under this -- a few
+  // hundred bytes at most. Bounds title/author/language/pendingMetaText accumulation in
+  // characterData so a corrupt or pathological content.opf can't exhaust the heap via an
+  // unbounded std::string::append (see appendBounded in ContentOpfParser.cpp for why that
+  // specifically aborts the device instead of throwing catchably).
+  static constexpr size_t MAX_ACCUMULATED_FIELD_LEN = 512;
+
+  // Set when the corresponding field hit the accumulation cap and stopped growing (see
+  // appendBounded/characterData in ContentOpfParser.cpp) -- checked once by
+  // Epub::parseContentOpf after the whole document is parsed, to log which book and field hit
+  // it, rather than on every XML chunk.
+  bool titleTruncated = false;
+  bool authorTruncated = false;
+  bool languageTruncated = false;
+  bool metaTextTruncated = false;
+
   std::string title;
   std::string author;
   std::string language;
