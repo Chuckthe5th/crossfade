@@ -465,10 +465,21 @@ void setup() {
   // bootloaders). Skipped on the one boot that's reporting a panic from the previous run, so a
   // repeatedly-crashing image stays eligible for the bootloader to revert automatically instead
   // of getting confirmed valid on the very boot where we know something went wrong.
+  //
+  // Only call the mark-valid API when otadata actually has this slot pending verification.
+  // A USB/esptool flash writes the app partition directly and never touches otadata, so its
+  // state there is whatever was last written -- typically ESP_OTA_IMG_VALID/UNDEFINED, not
+  // PENDING_VERIFY. Confirming a slot that was never marked pending is a no-op at best, so
+  // gating on the real state avoids exercising this call in a boot path it was never meant for.
   if (!HalSystem::isRebootFromPanic()) {
-    const esp_err_t rollbackErr = esp_ota_mark_app_valid_cancel_rollback();
-    if (rollbackErr != ESP_OK) {
-      LOG_DBG("MAIN", "esp_ota_mark_app_valid_cancel_rollback: %s", esp_err_to_name(rollbackErr));
+    const esp_partition_t* runningPartition = esp_ota_get_running_partition();
+    esp_ota_img_states_t otaState = ESP_OTA_IMG_UNDEFINED;
+    if (runningPartition && esp_ota_get_state_partition(runningPartition, &otaState) == ESP_OK &&
+        otaState == ESP_OTA_IMG_PENDING_VERIFY) {
+      const esp_err_t rollbackErr = esp_ota_mark_app_valid_cancel_rollback();
+      if (rollbackErr != ESP_OK) {
+        LOG_DBG("MAIN", "esp_ota_mark_app_valid_cancel_rollback: %s", esp_err_to_name(rollbackErr));
+      }
     }
   }
 }
