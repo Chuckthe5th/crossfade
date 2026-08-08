@@ -9,4 +9,10 @@ src/activities/reader/EpubReaderMenuActivity.h/.cpp: drawIconTabBar/tabSlotRect)
 CrossInk (https://github.com/uxjulia/CrossInk), also a fork of CrossPoint, licensed under the MIT
 License. Navigation is CrossFade's own existing tab+list button scheme (see SettingsActivity).
 
+The Lyra Carousel home theme (src/components/themes/lyra/LyraCarouselTheme.h/.cpp) is a functional
+port of CrossInk's Lyra Carousel theme (https://github.com/uxjulia/CrossInk), also a fork of
+CrossPoint, licensed under the MIT License. Adapted rather than copied wholesale -- see that file's
+own header comment for what differs (no perspective-warped side covers, no frame-cache
+pre-rendering, no reading-stats text) and why.
+
 CrossFade modifications are likewise released under the MIT License.
