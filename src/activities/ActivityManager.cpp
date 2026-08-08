@@ -22,6 +22,7 @@
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
+#include "util/KOReaderAutoSync.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -234,7 +235,16 @@ void ActivityManager::goToTransferAndSync() {
   replaceActivity(std::make_unique<TransferAndSyncActivity>(renderer, mappedInput));
 }
 
-void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
+void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh,
+                                 const bool checkRemoteProgress) {
+  if (checkRemoteProgress) {
+    // Silent, best-effort: no-ops immediately (no radio) unless a saved WiFi network and KOReader
+    // credentials both exist, and never blocks longer than its own short bound. Writes
+    // progress.bin directly if it finds a further remote position, so ReaderActivity/
+    // EpubReaderActivity below picks it up via their own existing load path -- no changes needed
+    // there. See KOReaderAutoSync::pullFurthestOnOpen().
+    KOReaderAutoSync::pullFurthestOnOpen(path, renderer);
+  }
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh));
 }
 

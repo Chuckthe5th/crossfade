@@ -177,7 +177,8 @@ void CoverGridBrowserActivity::activateSelected() {
   if (entries[selectedIndex].isSeries) {
     enterSeries(selectedIndex);
   } else {
-    activityManager.goToReader(entries[selectedIndex].path);
+    activityManager.goToReader(entries[selectedIndex].path, /*allowFastInitialRefresh=*/false,
+                               /*checkRemoteProgress=*/true);
   }
 }
 

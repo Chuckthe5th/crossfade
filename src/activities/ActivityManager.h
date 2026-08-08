@@ -101,7 +101,11 @@ class ActivityManager {
   // configured, HomeActivity's Transfer & Sync row calls goToFileTransfer() directly instead --
   // see HomeActivity::onTransferAndSyncOpen.
   void goToTransferAndSync();
-  void goToReader(std::string path, bool allowFastInitialRefresh = false);
+  // checkRemoteProgress: true only for a genuine user-initiated "open this book" action (picked
+  // from Home/Covers/Titles) -- NOT boot-resume, quick-resume-from-sleep, or in-reader
+  // re-navigation, where a network round trip would defeat the point of being fast. See
+  // KOReaderAutoSync::pullFurthestOnOpen().
+  void goToReader(std::string path, bool allowFastInitialRefresh = false, bool checkRemoteProgress = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);

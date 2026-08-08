@@ -18,7 +18,9 @@ void Activity::requestUpdateAndWait() { activityManager.requestUpdateAndWait(); 
 
 void Activity::onGoHome(HomeMenuItem item) { activityManager.goHome(item); }
 
-void Activity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
+void Activity::onSelectBook(const std::string& path) {
+  activityManager.goToReader(path, /*allowFastInitialRefresh=*/false, /*checkRemoteProgress=*/true);
+}
 
 void Activity::startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler) {
   this->resultHandler = std::move(resultHandler);
