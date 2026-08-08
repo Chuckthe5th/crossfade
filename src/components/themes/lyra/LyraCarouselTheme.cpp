@@ -23,20 +23,18 @@
 
 namespace {
 constexpr int kCenterCoverMaxW = LyraCarouselTheme::kCenterCoverW;
-constexpr int kCenterCoverMaxH = LyraCarouselTheme::kCenterCoverH;
 constexpr int kDisplayCenterW = LyraCarouselTheme::kDisplayCenterW;
 constexpr int kDisplayCenterH = LyraCarouselTheme::kDisplayCenterH;
 constexpr int kSideCoverMaxW = LyraCarouselTheme::kSideCoverW;
 constexpr int kSideCoverMaxH = LyraCarouselTheme::kSideCoverH;
+// The height every cover lookup in this file must use -- see LyraCarouselMetrics's homeCoverHeight
+// comment for why this has to match what HomeActivity::loadRecentCovers() actually pre-generates.
+constexpr int kCoverLookupHeight = LyraCarouselMetrics::values.homeCoverHeight;
 constexpr int kCoverTopPad = 18;
 constexpr int kCenterCoverVisualInset = LyraCarouselTheme::kCenterCoverVisualInset;
 constexpr int kCarouselVerticalLift = 8;
 constexpr int kSideOutlineW = 2;
 constexpr int kSideCornerRadius = 5;
-constexpr int kCoverStackLift = 15;
-constexpr int kCenterCoverTopInset = (((kCenterCoverMaxH - kDisplayCenterH) / 2) > kCoverStackLift)
-                                         ? ((kCenterCoverMaxH - kDisplayCenterH) / 2) - kCoverStackLift
-                                         : 0;
 
 constexpr int kTitleFontId = UI_12_FONT_ID;
 constexpr int kMenuLabelFontId = SMALL_FONT_ID;
@@ -126,18 +124,19 @@ Rect computeCenterCoverSlotRect(const GfxRenderer& renderer, const Rect rect) {
   const int reservedTitleBlockHeight = titleLineHeight * 2;
   const int titleY = rect.y + kTitleTopClearance;
   const int centerTileY = std::max(rect.y + kCoverTopPad, titleY + reservedTitleBlockHeight + kTitleBottomGap);
-  const int centerDrawY = centerTileY + kCenterCoverTopInset - kCarouselVerticalLift;
+  const int centerDrawY = centerTileY - kCarouselVerticalLift;
   const int centerX = (screenW - kDisplayCenterW) / 2;
   return Rect{centerX, centerDrawY, kDisplayCenterW, kDisplayCenterH};
 }
 
-// Loads book's cover thumbnail (cached by height, matching Lyra3CoversTheme's own approach --
-// this fork's UITheme::getCoverThumbPath only takes a height, not CrossInk's explicit width+height
-// variant) and draws it into targetRect, center-cropped to the target's aspect ratio. Returns false
+// Loads book's cover thumbnail -- always at kCoverLookupHeight, the one height
+// HomeActivity::loadRecentCovers() pre-generates for this theme, regardless of targetRect's own
+// height (which may be smaller, e.g. a downscaled side cover; drawBitmap scales to fit either way)
+// -- and draws it into targetRect, center-cropped to the target's aspect ratio. Returns false
 // (having drawn nothing) if there's no cover or it can't be read.
 bool drawCroppedCover(const GfxRenderer& renderer, const std::string& coverBmpPath, const Rect targetRect) {
   if (coverBmpPath.empty()) return false;
-  const std::string thumbPath = UITheme::getCoverThumbPath(coverBmpPath, targetRect.height);
+  const std::string thumbPath = UITheme::getCoverThumbPath(coverBmpPath, kCoverLookupHeight);
   HalFile file;
   if (!Storage.openFileForRead("HOME", thumbPath, file)) return false;
   Bitmap bitmap(file);
@@ -329,4 +328,12 @@ void LyraCarouselTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, const i
     renderer.drawText(kMenuLabelFontId, (renderer.getScreenWidth() - labelWidth) / 2, metrics.labelY + 2, label.c_str(),
                       true, EpdFontFamily::REGULAR);
   }
+}
+
+int LyraCarouselTheme::getMenuBottomEdge(const GfxRenderer&, const int menuTop, const int) const {
+  // See the declaration's comment: this menu is an icon row anchored to the screen's real bottom
+  // (computeMenuLayout), not a list stacked below menuTop, so it has no itemCount-dependent height
+  // to add here -- returning menuTop makes HomeActivity::onEnter()'s pinned-row fit-check reduce to
+  // "does the cover tile fit," the only real constraint for this theme.
+  return menuTop;
 }
