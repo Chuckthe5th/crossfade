@@ -532,6 +532,27 @@ void CoverGridBrowserActivity::drawCell(const int flatIndex, const int x, const 
     drawStackOverlay(stripX, innerY, SERIES_STRIP_WIDTH, coverHeight);
   }
 
+  // Recent Books only -- Library browsing shows unread books too, where a 0% bar would just be
+  // noise. Never for a series entry (isSeries): it represents several books, not one progress
+  // value. Placed 2-6px below the cover's bottom edge, inside CARD_PADDING's existing gap and
+  // never touching coverWidth/coverHeight -- the first 2px of that gap are left clear because the
+  // selection ring below (see `if (selected)`) draws its bottom stroke there when this cell is
+  // selected, and a fixed bar position (not one that shifts with selection state) reads better.
+  if (haveData && !entries[flatIndex].isSeries && source == Source::RecentBooks && SETTINGS.showCoverProgress) {
+    const float bookProgress = EpubReaderUtils::recentBookProgressPercent(entries[flatIndex].path);
+    if (bookProgress >= 0.0f) {
+      constexpr int kBarHeight = 4;
+      constexpr int kBarTopGap = 2;
+      const int barY = innerY + coverHeight + kBarTopGap;
+      const float clamped = std::clamp(bookProgress, 0.0f, 100.0f);
+      const int filledWidth = std::clamp(static_cast<int>((clamped / 100.0f) * innerW), 0, innerW);
+      renderer.fillRectDither(innerX, barY, innerW, kBarHeight, Color::LightGray);
+      if (filledWidth > 0) {
+        renderer.fillRect(innerX, barY, filledWidth, kBarHeight, true);
+      }
+    }
+  }
+
   if (selected) {
     renderer.drawRect(innerX - 2, innerY - 2, innerW + 4, coverHeight + 4, 2, true);
   }
