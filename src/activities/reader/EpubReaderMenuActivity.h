@@ -50,31 +50,31 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  // Tab-bar layout, hit-testing, and the "Confirm cycles tabs / Down moves into the list" focus
-  // model are adapted from CrossInk (https://github.com/uxjulia/CrossInk), also a CrossPoint fork
-  // -- see NOTICE. The tab set, icons, and menu items themselves are CrossFade's own.
-  enum class MenuTab : uint8_t { Main = 0, Bookmarks = 1 };
+  // Tab-bar icon layout is adapted from CrossInk (https://github.com/uxjulia/CrossInk), also a
+  // CrossPoint fork -- see NOTICE. Navigation is CrossFade's own existing tab+list scheme (see
+  // SettingsActivity): index 0 = tab row focused, 1..N = list item N-1; no touch anywhere in this
+  // activity, matching every other button-driven menu on this non-touch hardware.
+  enum class MenuTab : uint8_t { Main = 0, Bookmarks = 1, TextSettings = 2 };
   static constexpr size_t MAIN_TAB_INDEX = 0;
   static constexpr size_t BOOKMARKS_TAB_INDEX = 1;
-  static constexpr size_t MENU_TAB_COUNT = 2;
+  static constexpr size_t TEXT_SETTINGS_TAB_INDEX = 2;
+  static constexpr size_t MENU_TAB_COUNT = 3;
   using TabMenuItems = std::array<std::vector<MenuItem>, MENU_TAB_COUNT>;
 
   static TabMenuItems buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool isFinished);
   [[nodiscard]] const std::vector<MenuItem>& activeMenuItems() const;
   [[nodiscard]] size_t activeTabIndex() const { return static_cast<size_t>(activeTab); }
   void cycleActiveTab();
-  // -1 = focus on the tab row (Confirm cycles tabs); >= 0 = focus in the active tab's list.
+  // 0 = focus on the tab row (Confirm cycles tabs); 1..N = focus on list item (index-1).
   void focusTabRow();
   void closeCancelled();
   void drawIconTabBar(Rect rect) const;
-  // Tab slot rect for tab `index`, matching drawIconTabBar's own slot math -- shared so touch
-  // hit-testing never drifts out of sync with what's actually drawn.
   Rect tabSlotRect(Rect barRect, size_t index) const;
 
   // Fixed menu layout
   const TabMenuItems menuItems;
 
-  int selectedIndex = -1;
+  int selectedIndex = 0;
   MenuTab activeTab = MenuTab::Main;
 
   ButtonNavigator buttonNavigator;

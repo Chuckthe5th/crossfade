@@ -4,8 +4,9 @@ Copyright (c) 2026 Chuckthe5th
 This product is a fork of CrossPoint (https://github.com/crosspoint-reader/crosspoint-reader),
 Copyright (c) 2025 Dave Allie, licensed under the MIT License (see LICENSE).
 
-The EPUB reader menu's tab-bar layout, hit-testing, and tab-cycle navigation model (see
-src/activities/reader/EpubReaderMenuActivity.h/.cpp) are adapted from CrossInk
-(https://github.com/uxjulia/CrossInk), also a fork of CrossPoint, licensed under the MIT License.
+The EPUB reader menu's icon tab-bar layout (see
+src/activities/reader/EpubReaderMenuActivity.h/.cpp: drawIconTabBar/tabSlotRect) is adapted from
+CrossInk (https://github.com/uxjulia/CrossInk), also a fork of CrossPoint, licensed under the MIT
+License. Navigation is CrossFade's own existing tab+list button scheme (see SettingsActivity).
 
 CrossFade modifications are likewise released under the MIT License.

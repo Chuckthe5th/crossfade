@@ -7,6 +7,7 @@
 #include "components/UITheme.h"
 #include "components/icons/book.h"
 #include "components/icons/bookmark.h"
+#include "components/icons/settings2.h"
 #include "fontIds.h"
 
 namespace {
@@ -56,13 +57,13 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool
   TabMenuItems items;
   auto& mainItems = items[MAIN_TAB_INDEX];
   auto& bookmarkItems = items[BOOKMARKS_TAB_INDEX];
+  auto& textSettingsItems = items[TEXT_SETTINGS_TAB_INDEX];
   mainItems.reserve(12);
   bookmarkItems.reserve(2);
   mainItems.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     mainItems.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }
-  mainItems.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
   mainItems.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
   mainItems.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   mainItems.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
@@ -79,6 +80,8 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool
     bookmarkItems.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
   }
   bookmarkItems.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
+
+  textSettingsItems.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
   return items;
 }
 
@@ -86,7 +89,7 @@ const std::vector<EpubReaderMenuActivity::MenuItem>& EpubReaderMenuActivity::act
   return menuItems[activeTabIndex()];
 }
 
-void EpubReaderMenuActivity::focusTabRow() { selectedIndex = -1; }
+void EpubReaderMenuActivity::focusTabRow() { selectedIndex = 0; }
 
 void EpubReaderMenuActivity::cycleActiveTab() {
   const auto nextTabIndex = ButtonNavigator::nextIndex(static_cast<int>(activeTabIndex()), MENU_TAB_COUNT);
@@ -129,7 +132,7 @@ void EpubReaderMenuActivity::drawIconTabBar(const Rect rect) const {
     const Rect slot = tabSlotRect(rect, i);
     const int centerX = slot.x + slot.width / 2;
     const bool selected = i == activeTabIndex();
-    const bool tabFocused = selected && selectedIndex < 0;
+    const bool tabFocused = selected && selectedIndex == 0;
     const int boxX = centerX - selectedTabBoxWidth / 2;
     const int boxY = slot.y + (slot.height - selectedTabBoxHeight) / 2;
     const int iconX = centerX - tabIconSize / 2;
@@ -142,7 +145,8 @@ void EpubReaderMenuActivity::drawIconTabBar(const Rect rect) const {
       renderer.drawRoundedRect(boxX, boxY, selectedTabBoxWidth, selectedTabBoxHeight, 1, selectedTabBoxRadius, true);
     }
 
-    const uint8_t* icon = (i == MAIN_TAB_INDEX) ? BookIcon : BookmarkIcon;
+    const uint8_t* icon =
+        (i == MAIN_TAB_INDEX) ? BookIcon : (i == BOOKMARKS_TAB_INDEX) ? BookmarkIcon : Settings2Icon;
     if (tabFocused) {
       drawTabIcon(renderer, icon, iconX, iconY, tabIconSize, /*foregroundBlack=*/false);
     } else {
@@ -172,7 +176,7 @@ void EpubReaderMenuActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (selectedIndex >= 0) {
+    if (selectedIndex > 0) {
       focusTabRow();
       requestUpdate();
       return;
@@ -183,7 +187,7 @@ void EpubReaderMenuActivity::loop() {
 
   auto activateSelected = [this] {
     const auto& items = activeMenuItems();
-    const auto selectedAction = items[selectedIndex].action;
+    const auto selectedAction = items[selectedIndex - 1].action;
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       optionPopup.show(StrId::STR_ORIENTATION, orientationLabels.data(), static_cast<int>(orientationLabels.size()),
                        pendingOrientation, [this](int idx) {
@@ -208,69 +212,46 @@ void EpubReaderMenuActivity::loop() {
     finish();
   };
 
-  auto metrics = UITheme::getInstance().getMetrics();
-  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  const Rect tabBarRect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight,
-                        screen.width, metrics.tabBarHeight};
-  const int contentTop = tabBarRect.y + tabBarRect.height + metrics.verticalSpacing;
-  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
+  // No touch anywhere in this activity -- this is button-only hardware. Navigation mirrors
+  // SettingsActivity's existing tab+list scheme exactly: index 0 = tab row (Confirm cycles the
+  // active tab forward), 1..N = list item N-1; quick Next/Previous presses move through the list,
+  // holding Next/Previous jumps tabs directly, same as SettingsActivity's category switch.
+  bool hasChangedTab = false;
 
-  int tx = 0;
-  int ty = 0;
-  if (mappedInput.wasScreenTapped(tx, ty)) {
-    for (size_t i = 0; i < MENU_TAB_COUNT; i++) {
-      const Rect slot = tabSlotRect(tabBarRect, i);
-      if (tx >= slot.x && tx < slot.x + slot.width && ty >= slot.y && ty < slot.y + slot.height) {
-        if (activeTabIndex() != i) {
-          activeTab = static_cast<MenuTab>(i);
-        }
-        focusTabRow();
-        requestUpdate();
-        return;
-      }
-    }
-  }
-
-  const int itemCount = static_cast<int>(activeMenuItems().size());
-  switch (handleListTouch(selectedIndex, itemCount, contentTop, contentHeight, false)) {
-    case ListTouchResult::Activated:
-      if (selectedIndex >= 0) activateSelected();
-      return;
-    case ListTouchResult::Consumed:
-      return;
-    case ListTouchResult::None:
-      break;
-  }
-
-  // selectedIndex ranges -1..itemCount-1 (-1 = tab row focused). Folded into a 0..itemCount range
-  // (tab row as slot 0) so Up/Down and the button navigator wrap between the tab row and the
-  // list ends the same way CrossInk's reader menu does -- see NOTICE.
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex + 1, itemCount + 1) - 1;
-    requestUpdate();
-    return;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex + 1, itemCount + 1) - 1;
-    requestUpdate();
-    return;
-  }
-
-  buttonNavigator.onNext([this] {
-    const int count = static_cast<int>(activeMenuItems().size());
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex + 1, count + 1) - 1;
+  buttonNavigator.onNextRelease([this] {
+    const int itemCount = static_cast<int>(activeMenuItems().size());
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, itemCount + 1);
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this] {
-    const int count = static_cast<int>(activeMenuItems().size());
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex + 1, count + 1) - 1;
+  buttonNavigator.onPreviousRelease([this] {
+    const int itemCount = static_cast<int>(activeMenuItems().size());
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, itemCount + 1);
     requestUpdate();
   });
+
+  // Only activeTab changes here -- selectedIndex is deliberately left alone so the check below
+  // sees its pre-jump value, exactly like SettingsActivity's hasChangedCategory/
+  // selectedSettingIndex pair.
+  buttonNavigator.onNextContinuous([this, &hasChangedTab] {
+    hasChangedTab = true;
+    activeTab = static_cast<MenuTab>(ButtonNavigator::nextIndex(static_cast<int>(activeTabIndex()), MENU_TAB_COUNT));
+    requestUpdate();
+  });
+
+  buttonNavigator.onPreviousContinuous([this, &hasChangedTab] {
+    hasChangedTab = true;
+    activeTab =
+        static_cast<MenuTab>(ButtonNavigator::previousIndex(static_cast<int>(activeTabIndex()), MENU_TAB_COUNT));
+    requestUpdate();
+  });
+
+  if (hasChangedTab) {
+    selectedIndex = (selectedIndex == 0) ? 0 : 1;
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (selectedIndex < 0) {
+    if (selectedIndex == 0) {
       cycleActiveTab();
     } else {
       activateSelected();
@@ -311,7 +292,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   const auto& items = activeMenuItems();
 
   GUI.drawList(
-      renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, items.size(), selectedIndex,
+      renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, items.size(), selectedIndex - 1,
       [&items](int index) { return I18N.get(items[index].labelId); }, nullptr, nullptr,
       [this, &items](int index) {
         const auto value = items[index].action;
@@ -328,7 +309,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       true);
 
   // Footer / Hints
-  const auto confirmLabel = selectedIndex < 0 ? tr(STR_NEXT_FIELD) : tr(STR_SELECT);
+  const auto confirmLabel = selectedIndex == 0 ? tr(STR_NEXT_FIELD) : tr(STR_SELECT);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
