@@ -12,7 +12,7 @@
 int KOReaderSyncClient::lastHttpCode = 0;
 
 namespace {
-// Device identifier for CrossPoint reader
+// Fallback device name if a caller doesn't populate KOReaderProgress::device -- see its use below.
 constexpr char DEVICE_NAME[] = "CrossPoint";
 constexpr char DEVICE_ID[] = "crosspoint-reader";
 
@@ -234,7 +234,10 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   }
   doc["progress"] = progress.progress;
   doc["percentage"] = progress.percentage;
-  doc["device"] = DEVICE_NAME;
+  // Caller (KOReaderSyncActivity) sets progress.device from CrossPointSettings' user-configurable
+  // device name; DEVICE_NAME is only a fallback for the (currently theoretical) case of a caller
+  // that doesn't set it, so a sync payload never goes out with a blank device field.
+  doc["device"] = progress.device.empty() ? DEVICE_NAME : progress.device;
   doc["device_id"] = DEVICE_ID;
   if (progress.position.has_value() && KOREADER_STORE.usesCrossPointSyncServer()) {
     // CrossPoint-specific extension: do not send it to third-party KOSync servers.

@@ -25,6 +25,7 @@
 #include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -329,6 +330,11 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
+  if (setting.nameId == StrId::STR_DEVICE_NAME) {
+    openDeviceNameEditor();
+    return;
+  }
+
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
@@ -484,6 +490,27 @@ void SettingsActivity::openSleepTimeoutPicker() {
       });
 }
 
+void SettingsActivity::openDeviceNameEditor() {
+  // Prefilled with the effective (fallback-resolved) name, not the raw field, so an unset
+  // device shows its hardware default as a starting point instead of an empty box. A save
+  // shorter than MIN_DEVICE_NAME_LENGTH just means getEffectiveDeviceName() keeps falling
+  // back to the default -- no separate validation/reject step needed.
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_DEVICE_NAME),
+                                              SETTINGS.getEffectiveDeviceName(),
+                                              CrossPointSettings::MAX_DEVICE_NAME_LENGTH, InputType::Text),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          const auto& kb = std::get<KeyboardResult>(result.data);
+          strncpy(SETTINGS.deviceName, kb.text.c_str(), sizeof(SETTINGS.deviceName) - 1);
+          SETTINGS.deviceName[sizeof(SETTINGS.deviceName) - 1] = '\0';
+          SETTINGS.saveToFile();
+          rebuildSettingsLists();
+        }
+        requestUpdate();
+      });
+}
+
 void SettingsActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
 
@@ -525,7 +552,9 @@ void SettingsActivity::render(RenderLock&&) {
       [&settings](int i) {
         const auto& setting = settings[i];
         std::string valueText = "";
-        if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+        if (setting.nameId == StrId::STR_DEVICE_NAME) {
+          valueText = SETTINGS.getEffectiveDeviceName();
+        } else if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
           const bool value = SETTINGS.*(setting.valuePtr);
           valueText = value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
         } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
@@ -557,10 +586,13 @@ void SettingsActivity::render(RenderLock&&) {
       true);
 
   // Draw help text
+  const auto isSelectNotToggle = [](const StrId nameId) {
+    return nameId == StrId::STR_TIME_TO_SLEEP || nameId == StrId::STR_DEVICE_NAME;
+  };
   const auto confirmLabel =
       (selectedSettingIndex == 0)
           ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-          : (selectedSettingIndex > 0 && (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP
+          : (selectedSettingIndex > 0 && isSelectNotToggle((*currentSettings)[selectedSettingIndex - 1].nameId)
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));
 

@@ -331,6 +331,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_HIDE_BUTTON_HINTS, &CrossPointSettings::hideButtonHints, "hideButtonHints",
                             StrId::STR_CAT_SYSTEM),
+        SettingInfo::String(StrId::STR_DEVICE_NAME, &SETTINGS.deviceName[0], sizeof(SETTINGS.deviceName),
+                            "deviceName", StrId::STR_CAT_SYSTEM),
 
         // OPDS download folder: persisted + web-exposed, but category-less so it
         // is hidden from the on-device Settings screen (edited via OPDS UI).

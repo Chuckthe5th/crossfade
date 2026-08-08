@@ -4,6 +4,7 @@
 #include <PersistableStore.h>
 
 #include <cstdint>
+#include <string>
 
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
@@ -287,6 +288,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
+  // User-settable device name shown to companion apps (currently: KOReader sync's "device"
+  // field). Empty, or shorter than MIN_DEVICE_NAME_LENGTH, means "use the hardware-based
+  // default" -- see getEffectiveDeviceName().
+  static constexpr uint8_t MIN_DEVICE_NAME_LENGTH = 2;
+  static constexpr uint8_t MAX_DEVICE_NAME_LENGTH = 20;
+  char deviceName[MAX_DEVICE_NAME_LENGTH + 1] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // File browser view: flat list (stock) or a paginated cover grid. Defaults to
@@ -411,6 +418,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   static void validateFrontButtonMapping(CrossPointSettings& settings);
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);
+
+  // True if name's length falls within [MIN_DEVICE_NAME_LENGTH, MAX_DEVICE_NAME_LENGTH].
+  static bool isValidDeviceName(const std::string& name);
+  // Hardware-based fallback used when deviceName is empty or too short ("CrossFade X3"/"CrossFade X4").
+  static std::string getDefaultDeviceName();
+  // deviceName if isValidDeviceName() accepts it, else getDefaultDeviceName().
+  std::string getEffectiveDeviceName() const;
 
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;

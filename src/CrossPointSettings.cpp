@@ -1,5 +1,6 @@
 #include "CrossPointSettings.h"
 
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -88,6 +89,16 @@ uint8_t CrossPointSettings::sleepTimeoutEnumToMinutes(const uint8_t legacyValue)
     default:
       return 10;
   }
+}
+
+bool CrossPointSettings::isValidDeviceName(const std::string& name) {
+  return name.size() >= MIN_DEVICE_NAME_LENGTH && name.size() <= MAX_DEVICE_NAME_LENGTH;
+}
+
+std::string CrossPointSettings::getDefaultDeviceName() { return gpio.deviceIsX3() ? "CrossFade X3" : "CrossFade X4"; }
+
+std::string CrossPointSettings::getEffectiveDeviceName() const {
+  return isValidDeviceName(deviceName) ? deviceName : getDefaultDeviceName();
 }
 
 void CrossPointSettings::toJson(JsonDocument& doc) const {
