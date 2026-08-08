@@ -90,6 +90,7 @@ std::string computeDocumentHash(const std::string& path) {
 }  // namespace
 
 void pushOnSleep() {
+  if (!KOREADER_STORE.getAutoSyncEnabled()) return;
   if (!APP_STATE.lastSleepFromReader) return;
   const std::string& epubPath = APP_STATE.openEpubPath;
   if (epubPath.empty() || !FsHelpers::hasEpubExtension(epubPath)) return;
@@ -156,6 +157,7 @@ void pushOnSleep() {
 }
 
 void pullFurthestOnOpen(const std::string& epubPath, GfxRenderer& renderer) {
+  if (!KOREADER_STORE.getAutoSyncEnabled()) return;
   if (epubPath.empty() || !FsHelpers::hasEpubExtension(epubPath)) return;
   if (WIFI_STORE.getCredentialCount() == 0 || !KOREADER_STORE.hasCredentials()) return;
 
