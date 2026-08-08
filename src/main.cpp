@@ -36,6 +36,7 @@
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "util/KOReaderAutoSync.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -213,8 +214,16 @@ void enterDeepSleep(bool fromTimeout = false) {
     saveSleepFrameBuffer();
   }
 
-  // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
-  // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
+  // Silent, best-effort KOSync push: the sleep screen is already fully painted above, so nothing
+  // visible changes regardless of how long this takes. No-ops immediately (no radio) unless
+  // lastSleepFromReader is true and a saved WiFi network exists; bounded and abortable by a button
+  // press either way, and manages its own WiFi lifecycle -- see KOReaderAutoSync::pushOnSleep().
+  KOReaderAutoSync::pushOnSleep();
+
+  // Tear down WiFi so the modem power domain isn't held alive across deep sleep. Wake from deep
+  // sleep is effectively a chip reset, so no state needs to survive. Usually a no-op by this point
+  // -- pushOnSleep() already disconnects on every exit path -- but stays as a hard guarantee this
+  // never enters deep sleep with the radio left on, regardless of what changes upstream.
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
