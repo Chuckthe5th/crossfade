@@ -55,15 +55,13 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool
                                                                             bool isFinished) {
   TabMenuItems items;
   auto& mainItems = items[MAIN_TAB_INDEX];
-  mainItems.reserve(14);
+  auto& bookmarkItems = items[BOOKMARKS_TAB_INDEX];
+  mainItems.reserve(12);
+  bookmarkItems.reserve(2);
   mainItems.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     mainItems.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }
-  if (hasBookmarks) {
-    mainItems.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
-  }
-  mainItems.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
   mainItems.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
   mainItems.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
   mainItems.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
@@ -76,6 +74,11 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool
   mainItems.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   mainItems.push_back(
       {MenuAction::TOGGLE_FINISHED, isFinished ? StrId::STR_MARK_UNFINISHED : StrId::STR_MARK_FINISHED});
+
+  if (hasBookmarks) {
+    bookmarkItems.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
+  }
+  bookmarkItems.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
   return items;
 }
 
