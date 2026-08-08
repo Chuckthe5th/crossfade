@@ -20,16 +20,23 @@ constexpr ThemeMetrics makeValues() {
   // every cover missed the cache and fell back to the placeholder icon.
   //
   // 600/660 (the original values, unchanged since the initial port) also didn't fit either panel:
-  // X3 is 792x528, X4 is 800x480 -- both shorter than a 660px tile. 205/275 below were sized to
-  // fit X4 (the tighter of the two): title reserved to 1 line (not 2), dot row, progress bar (no
-  // percentage label -- the bar alone conveys progress; dropped to make room), and the existing
-  // icon-only button menu at the screen's real bottom all accounted for, leaving a 6px margin. See
-  // LyraCarouselTheme::getMenuBottomEdge for why the icon-only button menu doesn't need reserving
-  // additional space here for the pinned-book row. X3's 48px of extra headroom (792x528 vs X4's
-  // 800x480) becomes bottom margin, not a bigger cover -- both panels share one compile-time
-  // constant, and the cache height has to be one fixed value regardless of which panel is running.
-  v.homeCoverHeight = 205;
-  v.homeCoverTileHeight = 275;
+  // X3 is 792x528, X4 is 800x480 -- both shorter than a 660px tile. Getting the cover meaningfully
+  // larger than the ~150-205 range past chrome trimming meant cutting two more things: the
+  // separate title text above the cover (dropped -- real cover art already shows the title; the
+  // no-cover fallback still draws it inline, see drawRecentBookCover) and the dot-pagination row
+  // (dropped -- the visible side covers already show "book before/after this one," making the
+  // dots redundant), plus tightening the icon-menu's own padding (see kMenuRowDrop/kMenuIconSize/
+  // kMenuIconPad in the .cpp). Deliberately NOT cut: the button-hints row -- X3/X4 have no touch,
+  // so it's the only way a first-time user learns which physical button does what -- and the
+  // progress bar, kept per instruction even without cutting the icon-only menu's own vertical
+  // footprint. 320/335 below fit X4 (the tighter panel) with a 10px margin against the icon menu's
+  // label; see LyraCarouselTheme::getMenuBottomEdge for why the icon-only button menu doesn't need
+  // reserving additional space here for the pinned-book row. X3's 48px of extra headroom (792x528
+  // vs X4's 800x480) becomes bottom margin, not a bigger cover -- both panels share one
+  // compile-time constant, and the cache height has to be one fixed value regardless of which
+  // panel is running.
+  v.homeCoverHeight = 320;
+  v.homeCoverTileHeight = 335;
   v.homeRecentBooksCount = 3;
   v.keyboardKeyHeight = 50;
   v.keyboardCenteredText = true;
@@ -40,9 +47,8 @@ constexpr ThemeMetrics values = makeValues();
 }  // namespace LyraCarouselMetrics
 
 // Functional port of CrossInk's Lyra Carousel home theme (https://github.com/uxjulia/CrossInk,
-// also a CrossPoint fork -- see NOTICE): a large center cover flanked by smaller side covers, dot
-// pagination, and a bottom icon-only button menu. Two things CrossInk's version has that this
-// doesn't (yet, by request -- functional now, faithful later):
+// also a CrossPoint fork -- see NOTICE): a large center cover flanked by smaller side covers and a
+// bottom icon-only button menu. Differences from CrossInk's version:
 //  - True perspective-warped side covers. CrossInk added a drawPerspectiveBitmap primitive to its
 //    GfxRenderer for this; this fork doesn't have it, and adding a new low-level framebuffer
 //    primitive without hardware to verify it against felt like the wrong tradeoff. Side covers
@@ -50,14 +56,11 @@ constexpr ThemeMetrics values = makeValues();
 //  - The disk-backed frame cache that pre-renders adjacent carousel frames for instant scrolling
 //    (CrossInk's HomeActivity.cpp: gCarouselCache, sliding-window pre-render, setPreRenderIndex).
 //    This theme redraws normally on selection change, like every other CrossFade theme does.
-// See the .cpp for the smaller adaptations (icon/API name differences, dropped
-// BookReadingStats-only "time read" text -- this fork has no reading-stats subsystem).
+//  - No separate title text above the cover and no dot-pagination row (both cut in favor of a
+//    larger cover -- see homeCoverHeight's comment above); no reading-stats "time read" label
+//    (this fork has no reading-stats subsystem to source it from).
 class LyraCarouselTheme : public LyraTheme {
  public:
-  // Basis for the title's text-wrap width only (see the .cpp's wrappedText call) -- not a cover
-  // dimension. Left at its original value; the title sits above the cover and is allowed to be
-  // wider than it without looking wrong, the way a narrower cover box would.
-  static constexpr int kCenterCoverW = 340;
   static constexpr int kCenterCoverVisualInset = 10;
   // Cover box dimensions both derive from homeCoverHeight, at the SAME 0.6:1 width:height ratio
   // Epub::generateThumbBmp(height) actually crops the cached thumbnail to (see its comment) --

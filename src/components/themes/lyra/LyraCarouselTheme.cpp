@@ -22,7 +22,6 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int kCenterCoverMaxW = LyraCarouselTheme::kCenterCoverW;
 constexpr int kDisplayCenterW = LyraCarouselTheme::kDisplayCenterW;
 constexpr int kDisplayCenterH = LyraCarouselTheme::kDisplayCenterH;
 constexpr int kSideCoverMaxW = LyraCarouselTheme::kSideCoverW;
@@ -30,22 +29,24 @@ constexpr int kSideCoverMaxH = LyraCarouselTheme::kSideCoverH;
 // The height every cover lookup in this file must use -- see LyraCarouselMetrics's homeCoverHeight
 // comment for why this has to match what HomeActivity::loadRecentCovers() actually pre-generates.
 constexpr int kCoverLookupHeight = LyraCarouselMetrics::values.homeCoverHeight;
-constexpr int kCoverTopPad = 18;
+// Top clearance before the cover -- no title reservation above it anymore (see
+// LyraCarouselMetrics's homeCoverHeight comment), just a flat margin.
+constexpr int kCoverTopPad = 10;
 constexpr int kCenterCoverVisualInset = LyraCarouselTheme::kCenterCoverVisualInset;
 constexpr int kCarouselVerticalLift = 8;
 constexpr int kSideOutlineW = 2;
 constexpr int kSideCornerRadius = 5;
 
-constexpr int kTitleFontId = UI_12_FONT_ID;
 constexpr int kMenuLabelFontId = SMALL_FONT_ID;
-constexpr int kDotSize = 8;
-constexpr int kDotGap = 6;
-constexpr int kTitleTopClearance = 4;
-constexpr int kTitleDrawOffset = 5;
-constexpr int kTitleBottomGap = 8;
-constexpr int kMenuRowDrop = 31;
+// Tightened from the icon-menu's original 31px/32px/14px (kMenuRowDrop/kMenuIconSize/
+// kMenuIconPad) -- reclaiming space here, on top of dropping the title and dots, is what got the
+// cover from ~150-205px up into the 300s. See LyraCarouselMetrics's homeCoverHeight comment.
+constexpr int kMenuRowDrop = 8;
 
-constexpr int kFooterTopGap = 10;
+// Gap between the cover's bottom edge and the progress bar directly below it -- there's no dot
+// row between them anymore (see LyraCarouselMetrics's comment: dropped as redundant with the
+// visible side covers).
+constexpr int kFooterTopGap = 4;
 constexpr int kFooterProgressBarHeight = 5;
 
 constexpr int kCornerRadius = 6;
@@ -53,8 +54,8 @@ constexpr int kThinOutlineW = 1;    // always-visible outline around the center 
 constexpr int kSelectionLineW = 3;  // thicker outline when the carousel row is focused
 constexpr int kCenterOutlineW = 4;  // white ring around the center cover
 
-constexpr int kMenuIconSize = 32;
-constexpr int kMenuIconPad = 14;
+constexpr int kMenuIconSize = 24;
+constexpr int kMenuIconPad = 8;
 constexpr int kHighlightPad = 7;
 constexpr int kButtonHintsH = LyraCarouselMetrics::values.buttonHintsHeight;
 
@@ -107,7 +108,7 @@ struct MenuLayoutMetrics {
 MenuLayoutMetrics computeMenuLayout(const GfxRenderer& renderer, const int buttonCount) {
   const int tileH = kMenuIconPad + kMenuIconSize + kMenuIconPad;
   const int labelLineHeight = renderer.getLineHeight(kMenuLabelFontId);
-  const int rowY = renderer.getScreenHeight() - kButtonHintsH - tileH - labelLineHeight - kMenuRowDrop;
+  const int rowY = renderer.getScreenHeight() - kButtonHintsH - tileH - kMenuRowDrop;
   return {tileH, renderer.getScreenWidth() / std::max(1, buttonCount), labelLineHeight, rowY, rowY - labelLineHeight};
 }
 
@@ -117,18 +118,11 @@ Rect shrinkCenterCoverRect(const Rect& rect) {
   return Rect{rect.x + (rect.width - width) / 2, rect.y + (rect.height - height) / 2, width, height};
 }
 
+// No title reservation above the cover (see LyraCarouselMetrics's homeCoverHeight comment) --
+// just kCoverTopPad, then the usual upward lift.
 Rect computeCenterCoverSlotRect(const GfxRenderer& renderer, const Rect rect) {
   const int screenW = renderer.getScreenWidth();
-  const int titleLineHeight = renderer.getLineHeight(kTitleFontId);
-  // One line, not two -- reserving two cost 29px of cover height that a large center cover needed
-  // more (see LyraCarouselMetrics's comment). A title too long to fit truncates with an ellipsis
-  // (GfxRenderer::wrappedText/truncatedText, the same UTF-8-safe pattern used for menu labels
-  // elsewhere), not a hard mid-character clip -- see the title-drawing wrappedText call below,
-  // which must stay at maxLines=1 to match this reservation.
-  const int reservedTitleBlockHeight = titleLineHeight;
-  const int titleY = rect.y + kTitleTopClearance;
-  const int centerTileY = std::max(rect.y + kCoverTopPad, titleY + reservedTitleBlockHeight + kTitleBottomGap);
-  const int centerDrawY = centerTileY - kCarouselVerticalLift;
+  const int centerDrawY = rect.y + kCoverTopPad - kCarouselVerticalLift;
   const int centerX = (screenW - kDisplayCenterW) / 2;
   return Rect{centerX, centerDrawY, kDisplayCenterW, kDisplayCenterH};
 }
@@ -237,39 +231,19 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     }
   }
 
-  // --- Title above the center cover (1 line -- see computeCenterCoverSlotRect's comment) ---
-  const auto titleLines = renderer.wrappedText(kTitleFontId, centerBook.title.c_str(),
-                                               std::min(screenW - 40, kCenterCoverMaxW + 40), 1, EpdFontFamily::BOLD);
-  const int titleLineHeight = renderer.getLineHeight(kTitleFontId);
-  const int textCenterX = centerRect.x + centerRect.width / 2;
-  int currentTitleY = rect.y + kTitleTopClearance + kTitleDrawOffset;
-  for (const auto& line : titleLines) {
-    const int titleW = renderer.getTextWidth(kTitleFontId, line.c_str(), EpdFontFamily::BOLD);
-    renderer.drawText(kTitleFontId, textCenterX - titleW / 2, currentTitleY, line.c_str(), true, EpdFontFamily::BOLD);
-    currentTitleY += titleLineHeight;
-  }
-
-  // --- Dots: centered under the center cover, one per book ---
-  const int dotsY = centerCoverSlotRect.y + centerCoverSlotRect.height + 8;
-  const int totalDotsW = bookCount * kDotSize + (bookCount - 1) * kDotGap;
-  int dotX = centerCoverSlotRect.x + (centerCoverSlotRect.width - totalDotsW) / 2;
-  for (int i = 0; i < bookCount; ++i) {
-    if (i == centerIdx) {
-      renderer.fillRect(dotX, dotsY, kDotSize, kDotSize, true);
-    } else {
-      renderer.drawRect(dotX, dotsY, kDotSize, kDotSize, true);
-    }
-    dotX += kDotSize + kDotGap;
-  }
+  // No title text above the cover and no dot-pagination row -- see LyraCarouselMetrics's
+  // homeCoverHeight comment for why both were cut in favor of a larger cover: real cover art
+  // already shows the title (the no-cover fallback above still draws one inline), and the visible
+  // side covers already convey "book before/after this one" the way the dots did.
 
   // --- Progress bar: CrossFade's own real per-book percentage, computed for centerIdx (see
   // cachedCenterProgressPercent_'s comment -- not the passed-in progressPercent parameter).
-  // No percentage label -- the bar alone conveys progress; the number cost 26px of cover height
-  // for a fairly redundant readout (see LyraCarouselMetrics's comment). CrossInk's "total time
-  // read" label here comes from its BookReadingStats subsystem, which this fork doesn't have --
+  // No percentage label -- the bar alone conveys progress; the number cost cover height for a
+  // fairly redundant readout (see LyraCarouselMetrics's comment). CrossInk's "total time read"
+  // label here comes from its BookReadingStats subsystem, which this fork doesn't have --
   // dropped, not approximated. ---
   if (cachedCenterProgressPercent_ >= 0.0f) {
-    const int footerY = dotsY + kDotSize + kFooterTopGap;
+    const int footerY = centerCoverSlotRect.y + centerCoverSlotRect.height + kFooterTopGap;
     const int footerWidth = std::min(screenW - 2 * LyraCarouselMetrics::values.contentSidePadding, centerRect.width);
     const int footerX = centerRect.x + (centerRect.width - footerWidth) / 2;
     const float clamped = std::clamp(cachedCenterProgressPercent_, 0.0f, 100.0f);
