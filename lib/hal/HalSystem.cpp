@@ -1,11 +1,13 @@
 #include "HalSystem.h"
 
+#include <cstring>
 #include <string>
 
 #include "Arduino.h"
 #include "HalStorage.h"
 #include "Logging.h"
 #include "esp_debug_helpers.h"
+#include "esp_ota_ops.h"
 #include "esp_private/esp_cpu_internal.h"
 #include "esp_private/esp_system_attr.h"
 #include "esp_private/panic_internal.h"
@@ -14,6 +16,15 @@
 
 RTC_NOINIT_ATTR char panicMessage[256];
 RTC_NOINIT_ATTR HalSystem::StackFrame panicStack[MAX_PANIC_STACK_DEPTH];
+
+// Identity of the app binary that most recently started executing setup() -- see
+// HalSystem::recordBootIdentity(). Distinct from panicMessage/panicStack above: those get
+// explicitly cleared by clearPanic(), but this is intentionally never cleared -- it's
+// unconditionally overwritten every boot, and a stale (mismatched) value left behind by a
+// previous binary is the signal, not a hazard to guard against.
+RTC_NOINIT_ATTR uint32_t appIdentityMagic;
+RTC_NOINIT_ATTR uint8_t appIdentityHash[32];
+constexpr uint32_t APP_IDENTITY_MAGIC = 0x44495041;  // on disk (little-endian): 'A', 'P', 'I', 'D'
 
 extern "C" {
 
@@ -75,6 +86,21 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
 }
 
 namespace HalSystem {
+
+namespace {
+// Set once by recordBootIdentity() at the very start of setup(), before anything that could hang
+// or panic -- see isRebootFromPanic(), which reads it for the rest of this boot.
+bool bootIdentityMatchesLastBoot = false;
+}  // namespace
+
+void recordBootIdentity() {
+  const esp_app_desc_t* desc = esp_ota_get_app_description();
+  const bool hadValidMarker = appIdentityMagic == APP_IDENTITY_MAGIC;
+  bootIdentityMatchesLastBoot =
+      hadValidMarker && memcmp(appIdentityHash, desc->app_elf_sha256, sizeof(appIdentityHash)) == 0;
+  memcpy(appIdentityHash, desc->app_elf_sha256, sizeof(appIdentityHash));
+  appIdentityMagic = APP_IDENTITY_MAGIC;
+}
 
 void begin() {
   // This is mostly for the first boot, we need to initialize the panic info and logs to empty state
@@ -148,8 +174,18 @@ std::string getPanicInfo(bool full) {
 
 bool isRebootFromPanic() {
   const auto resetReason = esp_reset_reason();
-  return resetReason == ESP_RST_PANIC || resetReason == ESP_RST_CPU_LOCKUP || resetReason == ESP_RST_INT_WDT ||
-         resetReason == ESP_RST_TASK_WDT || resetReason == ESP_RST_WDT;
+  const bool panicOrWatchdogReason = resetReason == ESP_RST_PANIC || resetReason == ESP_RST_CPU_LOCKUP ||
+                                      resetReason == ESP_RST_INT_WDT || resetReason == ESP_RST_TASK_WDT ||
+                                      resetReason == ESP_RST_WDT;
+  if (!panicOrWatchdogReason) return false;
+  // On native-USB ESP32-C3 boards (no host-accessible EN line), esptool reboots into the
+  // newly-flashed app via the same RTC-watchdog reset path a genuine hang would trip -- so a
+  // watchdog-family reset reason alone can't tell "just flashed" apart from "actually hung".
+  // recordBootIdentity() (called first thing in setup(), before anything that could hang) only
+  // sees a match here if the currently-running binary was already executing before this reset
+  // happened, which a flash-triggered reboot -- reset before this binary's setup() ever ran --
+  // can't produce.
+  return bootIdentityMatchesLastBoot;
 }
 
 }  // namespace HalSystem

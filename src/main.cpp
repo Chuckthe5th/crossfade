@@ -261,6 +261,10 @@ void setupDisplayAndFonts(bool seamless = false) {
 }
 
 void setup() {
+  // Must run before anything else that could hang or panic -- see
+  // HalSystem::recordBootIdentity()/isRebootFromPanic().
+  HalSystem::recordBootIdentity();
+
   BoardConfig::holdPowerRails();
 
   t1 = millis();
