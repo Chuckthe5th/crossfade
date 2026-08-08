@@ -20,13 +20,16 @@ constexpr ThemeMetrics makeValues() {
   // every cover missed the cache and fell back to the placeholder icon.
   //
   // 600/660 (the original values, unchanged since the initial port) also didn't fit either panel:
-  // X3 is 792x528, X4 is 800x480 -- both shorter than a 660px tile. 140/270 below were sized to fit
-  // X4 (the tighter of the two) with the two-line title above the cover and the dot row + progress
-  // bar + percentage label below all accounted for, leaving margin. See
+  // X3 is 792x528, X4 is 800x480 -- both shorter than a 660px tile. 205/275 below were sized to
+  // fit X4 (the tighter of the two): title reserved to 1 line (not 2), dot row, progress bar (no
+  // percentage label -- the bar alone conveys progress; dropped to make room), and the existing
+  // icon-only button menu at the screen's real bottom all accounted for, leaving a 6px margin. See
   // LyraCarouselTheme::getMenuBottomEdge for why the icon-only button menu doesn't need reserving
-  // additional space here for the pinned-book row.
-  v.homeCoverHeight = 140;
-  v.homeCoverTileHeight = 270;
+  // additional space here for the pinned-book row. X3's 48px of extra headroom (792x528 vs X4's
+  // 800x480) becomes bottom margin, not a bigger cover -- both panels share one compile-time
+  // constant, and the cache height has to be one fixed value regardless of which panel is running.
+  v.homeCoverHeight = 205;
+  v.homeCoverTileHeight = 275;
   v.homeRecentBooksCount = 3;
   v.keyboardKeyHeight = 50;
   v.keyboardCenteredText = true;

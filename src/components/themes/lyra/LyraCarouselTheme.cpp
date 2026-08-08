@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -48,7 +47,6 @@ constexpr int kMenuRowDrop = 31;
 
 constexpr int kFooterTopGap = 10;
 constexpr int kFooterProgressBarHeight = 5;
-constexpr int kFooterPercentTopGap = 2;
 
 constexpr int kCornerRadius = 6;
 constexpr int kThinOutlineW = 1;    // always-visible outline around the center cover
@@ -122,7 +120,12 @@ Rect shrinkCenterCoverRect(const Rect& rect) {
 Rect computeCenterCoverSlotRect(const GfxRenderer& renderer, const Rect rect) {
   const int screenW = renderer.getScreenWidth();
   const int titleLineHeight = renderer.getLineHeight(kTitleFontId);
-  const int reservedTitleBlockHeight = titleLineHeight * 2;
+  // One line, not two -- reserving two cost 29px of cover height that a large center cover needed
+  // more (see LyraCarouselMetrics's comment). A title too long to fit truncates with an ellipsis
+  // (GfxRenderer::wrappedText/truncatedText, the same UTF-8-safe pattern used for menu labels
+  // elsewhere), not a hard mid-character clip -- see the title-drawing wrappedText call below,
+  // which must stay at maxLines=1 to match this reservation.
+  const int reservedTitleBlockHeight = titleLineHeight;
   const int titleY = rect.y + kTitleTopClearance;
   const int centerTileY = std::max(rect.y + kCoverTopPad, titleY + reservedTitleBlockHeight + kTitleBottomGap);
   const int centerDrawY = centerTileY - kCarouselVerticalLift;
@@ -234,9 +237,9 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     }
   }
 
-  // --- Title above the center cover ---
+  // --- Title above the center cover (1 line -- see computeCenterCoverSlotRect's comment) ---
   const auto titleLines = renderer.wrappedText(kTitleFontId, centerBook.title.c_str(),
-                                               std::min(screenW - 40, kCenterCoverMaxW + 40), 2, EpdFontFamily::BOLD);
+                                               std::min(screenW - 40, kCenterCoverMaxW + 40), 1, EpdFontFamily::BOLD);
   const int titleLineHeight = renderer.getLineHeight(kTitleFontId);
   const int textCenterX = centerRect.x + centerRect.width / 2;
   int currentTitleY = rect.y + kTitleTopClearance + kTitleDrawOffset;
@@ -261,8 +264,10 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
 
   // --- Progress bar: CrossFade's own real per-book percentage, computed for centerIdx (see
   // cachedCenterProgressPercent_'s comment -- not the passed-in progressPercent parameter).
-  // CrossInk's "total time read" label here comes from its BookReadingStats subsystem, which
-  // this fork doesn't have -- dropped, not approximated. ---
+  // No percentage label -- the bar alone conveys progress; the number cost 26px of cover height
+  // for a fairly redundant readout (see LyraCarouselMetrics's comment). CrossInk's "total time
+  // read" label here comes from its BookReadingStats subsystem, which this fork doesn't have --
+  // dropped, not approximated. ---
   if (cachedCenterProgressPercent_ >= 0.0f) {
     const int footerY = dotsY + kDotSize + kFooterTopGap;
     const int footerWidth = std::min(screenW - 2 * LyraCarouselMetrics::values.contentSidePadding, centerRect.width);
@@ -273,11 +278,6 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     if (filledWidth > 0) {
       renderer.fillRect(footerX, footerY, filledWidth, kFooterProgressBarHeight, true);
     }
-    char label[16];
-    snprintf(label, sizeof(label), "%.0f%%", clamped);
-    const int labelW = renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::REGULAR);
-    renderer.drawText(UI_10_FONT_ID, footerX + footerWidth - labelW,
-                      footerY + kFooterProgressBarHeight + kFooterPercentTopGap, label, true, EpdFontFamily::REGULAR);
   }
 
   // --- Outline around the center cover, thicker when the carousel row itself is focused ---
