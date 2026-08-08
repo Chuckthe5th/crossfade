@@ -428,6 +428,8 @@ int CrossPointSettings::getReaderFontId() const {
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
   const bool sans = (fontFamily == NOTOSANS);
   switch (pt) {
+    case 10:
+      return sans ? NOTOSANS_10_FONT_ID : NOTOSERIF_10_FONT_ID;
     case 12:
       return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
     case 16:

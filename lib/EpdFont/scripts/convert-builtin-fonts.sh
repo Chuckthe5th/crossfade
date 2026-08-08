@@ -5,8 +5,8 @@ set -e
 cd "$(dirname "$0")"
 
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
-NOTOSERIF_FONT_SIZES=(12 14 16 18)
-NOTOSANS_FONT_SIZES=(12 14 16 18)
+NOTOSERIF_FONT_SIZES=(10 12 14 16 18)
+NOTOSANS_FONT_SIZES=(10 12 14 16 18)
 
 for size in ${NOTOSERIF_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
