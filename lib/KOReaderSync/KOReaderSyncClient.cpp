@@ -138,7 +138,8 @@ KOReaderSyncClient::Error KOReaderSyncClient::createUser() {
 }
 
 KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& documentHash,
-                                                          KOReaderProgress& outProgress) {
+                                                          KOReaderProgress& outProgress,
+                                                          const AbortCallback& shouldAbort) {
   lastHttpCode = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
@@ -156,7 +157,15 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     return NETWORK_ERROR;
   }
   applyAuthHeaders(http);
-  const int httpCode = http.GET();
+  // Own body accumulator: the abort-aware overload streams via callback instead of the
+  // convenience GET() that fills http.getString() internally.
+  std::string responseBody;
+  const int httpCode = http.GET(
+      [&responseBody](const uint8_t* data, size_t len) {
+        responseBody.append(reinterpret_cast<const char*>(data), len);
+        return true;
+      },
+      shouldAbort);
   lastHttpCode = httpCode;
 
   LOG_DBG("KOSync", "Get progress response: %d", httpCode);
@@ -168,7 +177,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
   if (httpCode == 200) {
     JsonDocument doc;
-    const DeserializationError error = deserializeJson(doc, http.getString().c_str());
+    const DeserializationError error = deserializeJson(doc, responseBody.c_str());
     http.end();
 
     if (error) {
@@ -212,7 +221,8 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   return SERVER_ERROR;
 }
 
-KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgress& progress) {
+KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgress& progress,
+                                                              const AbortCallback& shouldAbort) {
   lastHttpCode = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
@@ -265,7 +275,11 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   }
   applyAuthHeaders(http);
   http.addHeader("Content-Type", "application/json");
-  const int httpCode = http.sendRequest("PUT", body);
+  // Response body is unused here, unlike getProgress() -- discard it, still threading the abort
+  // callback through so a PUT can be cancelled mid-flight the same way a GET can.
+  const int httpCode = http.sendRequest(
+      "PUT", reinterpret_cast<const uint8_t*>(body.data()), body.size(),
+      [](const uint8_t*, size_t) { return true; }, shouldAbort);
   http.end();
   lastHttpCode = httpCode;
 
