@@ -360,10 +360,10 @@ void WifiSelectionActivity::attemptConnection() {
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
   WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
 
-  // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
+  // Set hostname so routers show "CrossFade-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
   String mac = WiFi.macAddress();
   mac.replace(":", "");
-  String hostname = "CrossPoint-Reader-" + mac;
+  String hostname = "CrossFade-Reader-" + mac;
   WiFi.setHostname(hostname.c_str());
 
   if (selectedRequiresPassword && !enteredPassword.empty()) {
