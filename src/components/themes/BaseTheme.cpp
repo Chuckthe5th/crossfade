@@ -469,7 +469,7 @@ bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, 
 void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                     const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                     bool& bufferRestored, std::function<bool()> storeCoverBuffer,
-                                    float /*progressPercent*/) const {
+                                    float progressPercent) const {
   const bool hasContinueReading = !recentBooks.empty();
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
 
@@ -692,6 +692,24 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         bookY + (bookHeight - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
     renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
     renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
+  }
+
+  // Classic has zero slack below the cover (homeCoverHeight == homeCoverTileHeight -- see
+  // BaseMetrics), unlike every other theme, so it gets a different treatment: a vertical line in
+  // the (large, aspect-ratio-driven) margin beside the cover, filled bottom-up, instead of a
+  // horizontal bar under it. Drawn unconditionally on every render (not cached behind
+  // coverRendered/bufferRestored) since it's a fixed-position side element, not tied to the cover
+  // bitmap load -- simplest way to stay correct across this function's several cache paths.
+  if (hasContinueReading && SETTINGS.showCoverProgress && progressPercent >= 0.0f) {
+    constexpr int kLineWidth = 6;
+    constexpr int kLineGap = 14;
+    const int lineX = bookX - kLineGap - kLineWidth;
+    const float clamped = std::clamp(progressPercent, 0.0f, 100.0f);
+    const int filledHeight = std::clamp(static_cast<int>((clamped / 100.0f) * bookHeight), 0, bookHeight);
+    renderer.drawRect(lineX, bookY, kLineWidth, bookHeight, true);
+    if (filledHeight > 0) {
+      renderer.fillRect(lineX, bookY + (bookHeight - filledHeight), kLineWidth, filledHeight, true);
+    }
   }
 }
 
