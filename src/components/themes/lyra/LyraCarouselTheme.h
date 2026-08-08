@@ -54,22 +54,26 @@ constexpr ThemeMetrics values = makeValues();
 // BookReadingStats-only "time read" text -- this fork has no reading-stats subsystem).
 class LyraCarouselTheme : public LyraTheme {
  public:
-  // Width is unaffected by the X3/X4 layout bug (both panels are 792-800px wide, plenty for a
-  // 340px cover) -- kept exactly as originally sized, including the 86%+24 "shrink slightly, but
-  // not below what a small clamp allows" visual proportion.
+  // Basis for the title's text-wrap width only (see the .cpp's wrappedText call) -- not a cover
+  // dimension. Left at its original value; the title sits above the cover and is allowed to be
+  // wider than it without looking wrong, the way a narrower cover box would.
   static constexpr int kCenterCoverW = 340;
-  static constexpr int kBaseDisplayCenterW = (kCenterCoverW * 86) / 100;
-  static constexpr int kDisplayCenterW =
-      ((kBaseDisplayCenterW + 24) < kCenterCoverW) ? (kBaseDisplayCenterW + 24) : kCenterCoverW;
   static constexpr int kCenterCoverVisualInset = 10;
-  // Height has no separate "max vs display" tier (unlike width, above) -- that indirection is what
-  // let the display height (488) drift from homeCoverHeight (600, the cache height) in the first
-  // place. The cover is simply displayed at homeCoverHeight; see LyraCarouselMetrics's comment.
+  // Cover box dimensions both derive from homeCoverHeight, at the SAME 0.6:1 width:height ratio
+  // Epub::generateThumbBmp(height) actually crops the cached thumbnail to (see its comment) --
+  // previously width was a fixed 316px independent of height, which was fine while height was
+  // 488 (ratio 0.65, close enough to look right) but badly wrong once height shrank to 150-205
+  // chasing the X3/X4 fit (ratio up to 1.54 -- landscape, for a portrait book cover). The bitmap
+  // only fills part of a box shaped like that, and anything sized off centerRect.width (e.g. the
+  // progress bar) comes out oversized too. Matching the generation ratio here means the cached
+  // bitmap fills its box exactly, regardless of what homeCoverHeight is tuned to.
   static constexpr int kDisplayCenterH = LyraCarouselMetrics::values.homeCoverHeight;
-  static constexpr int kSideCoverW = 200;
-  // Side covers: a fixed proportion of the center cover's height, drawn from the SAME cached
-  // thumbnail (downscaled) rather than a second, never-pre-generated cache entry.
+  static constexpr int kDisplayCenterW = static_cast<int>(kDisplayCenterH * 0.6f);
+  // Side covers: a fixed proportion of the center cover's height (not a second, never-pre
+  // -generated cache entry -- drawn from the SAME cached thumbnail, downscaled), width at the
+  // same 0.6:1 ratio as the center cover for the same reason.
   static constexpr int kSideCoverH = (LyraCarouselMetrics::values.homeCoverHeight * 70) / 100;
+  static constexpr int kSideCoverW = static_cast<int>(kSideCoverH * 0.6f);
 
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
