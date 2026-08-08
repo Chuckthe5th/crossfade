@@ -2,12 +2,15 @@
 #include <Epub.h>
 #include <I18n.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
+
+struct Rect;
 
 class EpubReaderMenuActivity final : public Activity {
  public:
@@ -47,13 +50,32 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool isFinished);
+  // Tab-bar layout, hit-testing, and the "Confirm cycles tabs / Down moves into the list" focus
+  // model are adapted from CrossInk (https://github.com/uxjulia/CrossInk), also a CrossPoint fork
+  // -- see NOTICE. The tab set, icons, and menu items themselves are CrossFade's own.
+  enum class MenuTab : uint8_t { Main = 0, Bookmarks = 1 };
+  static constexpr size_t MAIN_TAB_INDEX = 0;
+  static constexpr size_t BOOKMARKS_TAB_INDEX = 1;
+  static constexpr size_t MENU_TAB_COUNT = 2;
+  using TabMenuItems = std::array<std::vector<MenuItem>, MENU_TAB_COUNT>;
+
+  static TabMenuItems buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool isFinished);
+  [[nodiscard]] const std::vector<MenuItem>& activeMenuItems() const;
+  [[nodiscard]] size_t activeTabIndex() const { return static_cast<size_t>(activeTab); }
+  void cycleActiveTab();
+  // -1 = focus on the tab row (Confirm cycles tabs); >= 0 = focus in the active tab's list.
+  void focusTabRow();
   void closeCancelled();
+  void drawIconTabBar(Rect rect) const;
+  // Tab slot rect for tab `index`, matching drawIconTabBar's own slot math -- shared so touch
+  // hit-testing never drifts out of sync with what's actually drawn.
+  Rect tabSlotRect(Rect barRect, size_t index) const;
 
   // Fixed menu layout
-  const std::vector<MenuItem> menuItems;
+  const TabMenuItems menuItems;
 
-  int selectedIndex = 0;
+  int selectedIndex = -1;
+  MenuTab activeTab = MenuTab::Main;
 
   ButtonNavigator buttonNavigator;
   OptionPopup optionPopup;
