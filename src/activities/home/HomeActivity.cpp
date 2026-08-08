@@ -18,8 +18,30 @@
 #include "OpdsServerStore.h"
 #include "PinnedBookStore.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/EpubReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+// -1.0f (BaseTheme::drawRecentBookCover's "not available" sentinel) for anything that isn't an
+// EPUB, or an EPUB whose book.bin cache can't be loaded from disk as-is (buildIfMissing=false --
+// a recent book was already opened before to land in this list, so its cache should already
+// exist; this deliberately doesn't pay for a full rebuild just to decorate the home screen).
+float recentBookProgressPercent(const std::string& path) {
+  if (!FsHelpers::hasEpubExtension(path)) return -1.0f;
+
+  Epub epub(path, "/.crosspoint");
+  if (!epub.load(/*buildIfMissing=*/false, /*skipLoadingCss=*/true)) return -1.0f;
+
+  int spineIndex = 0;
+  int pageNumber = 0;
+  int pageCount = 0;
+  if (!EpubReaderUtils::loadProgress(epub.getCachePath(), spineIndex, pageNumber, pageCount)) return -1.0f;
+
+  const float chapterProgress = pageCount > 0 ? static_cast<float>(pageNumber) / static_cast<float>(pageCount) : 0.0f;
+  return epub.calculateProgress(spineIndex, chapterProgress) * 100.0f;
+}
+}  // namespace
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, Transfer & Sync, Settings
@@ -336,9 +358,13 @@ void HomeActivity::render(RenderLock&&) {
   coverRectW = pageWidth;
   coverRectH = metrics.homeCoverTileHeight;
 
+  const float recentProgressPercent =
+      (!recentBooks.empty() && selectorIndex >= 0 && selectorIndex < static_cast<int>(recentBooks.size()))
+          ? recentBookProgressPercent(recentBooks[selectorIndex].path)
+          : -1.0f;
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                          std::bind(&HomeActivity::storeCoverBuffer, this));
+                          std::bind(&HomeActivity::storeCoverBuffer, this), recentProgressPercent);
 
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_TRANSFER_AND_SYNC),

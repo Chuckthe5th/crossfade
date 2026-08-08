@@ -105,7 +105,7 @@ class LyraTheme : public BaseTheme {
   int getMenuBottomEdge(const GfxRenderer& renderer, int menuTop, int itemCount) const override;
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
-                           std::function<bool()> storeCoverBuffer) const override;
+                           std::function<bool()> storeCoverBuffer, float progressPercent = -1.0f) const override;
   void drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) const;
   bool showsFileIcons() const override { return true; }
 };
