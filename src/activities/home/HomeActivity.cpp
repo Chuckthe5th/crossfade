@@ -70,6 +70,28 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   int progress = 0;
   for (RecentBook& book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
+      // Self-heal a stale coverBmpPath template. Confirmed on real hardware: a book added to
+      // Recents by a different build's cover-path scheme (e.g. a "[WIDTH]x[HEIGHT]"-shaped
+      // template no CrossFade code has ever produced -- this fork's own history never contained
+      // that string) leaves a path that getCoverThumbPath's substitution -- it only knows
+      // "[HEIGHT]" -- can never fully resolve, so it looks up a filename like
+      // "thumb_[WIDTH]x400.bmp" that will never exist, on every theme, forever. The template is
+      // wrong, not merely the file missing, so re-derive it fresh every time rather than retrying
+      // a path that can't succeed -- cheap (no I/O until .load()), and guarantees this always
+      // matches what EpubReaderActivity writes on open and what generateThumbBmp below writes.
+      std::string freshTemplate;
+      if (FsHelpers::hasEpubExtension(book.path)) {
+        freshTemplate = Epub(book.path, "/.crosspoint").getThumbBmpPath();
+      } else if (FsHelpers::hasXtcExtension(book.path)) {
+        freshTemplate = Xtc(book.path, "/.crosspoint").getThumbBmpPath();
+      }
+      if (!freshTemplate.empty() && freshTemplate != book.coverBmpPath) {
+        book.coverBmpPath = freshTemplate;
+        RECENT_BOOKS.updateBook(book.path, book.title, book.author, freshTemplate);
+        coverRendered = false;
+        requestUpdate();
+      }
+
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       if (!Storage.exists(coverPath.c_str())) {
         // If epub, try to load the metadata for title/author and cover
