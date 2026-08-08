@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Epub.h>
+#include <FsHelpers.h>
 #include <Logging.h>
 
 #include "ProgressFile.h"
@@ -53,6 +54,25 @@ inline bool loadProgress(const std::string& cachePath, int& spineIndex, int& pag
     pageCount = data[4] + (data[5] << 8);
   }
   return true;
+}
+
+// 0-100 completion percentage for an EPUB's saved reading progress, or -1.0f if path isn't an
+// EPUB or its book.bin cache can't be loaded from disk as-is (buildIfMissing=false -- callers use
+// this only for books that should already have been opened once, e.g. recent/library covers, so
+// this deliberately doesn't pay for a full rebuild just to decorate a cover).
+inline float recentBookProgressPercent(const std::string& path) {
+  if (!FsHelpers::hasEpubExtension(path)) return -1.0f;
+
+  Epub epub(path, "/.crosspoint");
+  if (!epub.load(/*buildIfMissing=*/false, /*skipLoadingCss=*/true)) return -1.0f;
+
+  int spineIndex = 0;
+  int pageNumber = 0;
+  int pageCount = 0;
+  if (!loadProgress(epub.getCachePath(), spineIndex, pageNumber, pageCount)) return -1.0f;
+
+  const float chapterProgress = pageCount > 0 ? static_cast<float>(pageNumber) / static_cast<float>(pageCount) : 0.0f;
+  return epub.calculateProgress(spineIndex, chapterProgress) * 100.0f;
 }
 
 }  // namespace EpubReaderUtils
