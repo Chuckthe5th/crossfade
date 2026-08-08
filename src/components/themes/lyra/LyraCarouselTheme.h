@@ -89,4 +89,12 @@ class LyraCarouselTheme : public LyraTheme {
   // row below it is focused (selectorIndex >= recentBooks.size()). mutable: drawRecentBookCover is
   // const, matching every other theme's render methods.
   mutable int lastCenterIdx_ = -1;
+  // The centered book's completion percentage, computed once when centerIdx changes (not from the
+  // progressPercent parameter, which HomeActivity keys on selectorIndex -- a different, home-menu
+  // -wide cursor that moves into the icon-menu range, and so goes to -1.0f, the instant the icon
+  // menu gets focus, even though the carousel's own centerIdx correctly stays put; that mismatch
+  // was why the progress bar disappeared as soon as you touched the button menu). Cached rather
+  // than recomputed every render for the same reason Lyra3CoversTheme caches its own -- it's a
+  // real Epub::load() otherwise repeated for no reason on every render.
+  mutable float cachedCenterProgressPercent_ = -1.0f;
 };

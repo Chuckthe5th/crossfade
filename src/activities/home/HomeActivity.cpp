@@ -75,22 +75,28 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         // If epub, try to load the metadata for title/author and cover
         if (FsHelpers::hasEpubExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
-          // Skip loading css since we only need metadata here
-          epub.load(false, true);
-
-          // Try to generate thumbnail image for Continue Reading card
-          if (!showingLoading) {
-            showingLoading = true;
-            popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+          // Skip loading css since we only need metadata here. buildIfMissing=false, so a book
+          // whose book.bin cache isn't already built (anything except the just-opened book, whose
+          // cache is guaranteed fresh) legitimately fails to load here -- previously this return
+          // value was ignored and generateThumbBmp() got called anyway, almost always failing too,
+          // which permanently wiped coverBmpPath (see below) for a book that may just need its
+          // cache built later, not one with no cover. Skip it for this pass instead; loadRecentBooks
+          // reloads coverBmpPath fresh next time Home is entered, so this isn't a permanent loss.
+          if (epub.load(false, true)) {
+            // Try to generate thumbnail image for Continue Reading card
+            if (!showingLoading) {
+              showingLoading = true;
+              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+            }
+            GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
+            bool success = epub.generateThumbBmp(coverHeight);
+            if (!success) {
+              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+              book.coverBmpPath = "";
+            }
+            coverRendered = false;
+            requestUpdate();
           }
-          GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-          bool success = epub.generateThumbBmp(coverHeight);
-          if (!success) {
-            RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
-            book.coverBmpPath = "";
-          }
-          coverRendered = false;
-          requestUpdate();
         } else if (FsHelpers::hasXtcExtension(book.path)) {
           // Handle XTC file
           Xtc xtc(book.path, "/.crosspoint");

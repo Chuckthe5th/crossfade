@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "activities/reader/EpubReaderUtils.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "components/icons/folder.h"
@@ -156,7 +157,7 @@ bool drawCroppedCover(const GfxRenderer& renderer, const std::string& coverBmpPa
 void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                             const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                             bool& bufferRestored, std::function<bool()> storeCoverBuffer,
-                                            float progressPercent) const {
+                                            float /*progressPercent*/) const {
   if (recentBooks.empty()) {
     drawEmptyRecents(renderer, rect);
     return;
@@ -169,6 +170,9 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
   if (centerIdx != lastCenterIdx_) {
     coverRendered = false;
     coverBufferStored = false;
+    // See cachedCenterProgressPercent_'s comment: computed here (only when the centered book
+    // actually changes), not from the progressPercent parameter.
+    cachedCenterProgressPercent_ = EpubReaderUtils::recentBookProgressPercent(recentBooks[centerIdx].path);
   }
   lastCenterIdx_ = centerIdx;
 
@@ -255,14 +259,15 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     dotX += kDotSize + kDotGap;
   }
 
-  // --- Progress bar: CrossFade's own real per-book percentage (HomeActivity computes it).
+  // --- Progress bar: CrossFade's own real per-book percentage, computed for centerIdx (see
+  // cachedCenterProgressPercent_'s comment -- not the passed-in progressPercent parameter).
   // CrossInk's "total time read" label here comes from its BookReadingStats subsystem, which
   // this fork doesn't have -- dropped, not approximated. ---
-  if (progressPercent >= 0.0f) {
+  if (cachedCenterProgressPercent_ >= 0.0f) {
     const int footerY = dotsY + kDotSize + kFooterTopGap;
     const int footerWidth = std::min(screenW - 2 * LyraCarouselMetrics::values.contentSidePadding, centerRect.width);
     const int footerX = centerRect.x + (centerRect.width - footerWidth) / 2;
-    const float clamped = std::clamp(progressPercent, 0.0f, 100.0f);
+    const float clamped = std::clamp(cachedCenterProgressPercent_, 0.0f, 100.0f);
     const int filledWidth = std::clamp(static_cast<int>((clamped / 100.0f) * footerWidth), 0, footerWidth);
     renderer.fillRectDither(footerX, footerY, footerWidth, kFooterProgressBarHeight, Color::LightGray);
     if (filledWidth > 0) {

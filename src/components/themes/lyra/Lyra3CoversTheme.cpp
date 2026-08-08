@@ -77,6 +77,12 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
                             true);
           renderer.drawIcon(CoverIcon, tileX + hPaddingInSelection + 24, tileY + hPaddingInSelection + 24, 32);
         }
+
+        // Computed here (once per cover-set-change, alongside the cover bitmap load) rather than
+        // in the always-executed loop below, which runs on every render including ones that don't
+        // change which books are showing -- recomputing via a real Epub::load() that often was
+        // needless load on a memory-constrained device.
+        cachedProgressPercent_[i] = EpubReaderUtils::recentBookProgressPercent(recentBooks[i].path);
       }
 
       coverBufferStored = storeCoverBuffer();
@@ -112,11 +118,12 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       }
 
       if (SETTINGS.showCoverProgress) {
-        // Computed per-book here (not from the passed-in progressPercent, which only reflects
-        // whichever single book is selected) since all three covers show a bar simultaneously.
-        // Only a 5px gap exists between the cover's bottom edge and the title text below it --
-        // the bar takes 4px of it, biased to the top so a 1px clearance survives to the text.
-        const float bookProgress = EpubReaderUtils::recentBookProgressPercent(recentBooks[i].path);
+        // Per-book (not the passed-in progressPercent, which only reflects whichever single book
+        // is selected) since all three covers show a bar simultaneously -- read from the cache
+        // populated above, not recomputed here (see cachedProgressPercent_'s comment). Only a 5px
+        // gap exists between the cover's bottom edge and the title text below it -- the bar takes
+        // 4px of it, biased to the top so a 1px clearance survives to the text.
+        const float bookProgress = cachedProgressPercent_[i];
         if (bookProgress >= 0.0f) {
           constexpr int kBarHeight = 4;
           const int barY = tileY + hPaddingInSelection + Lyra3CoversMetrics::values.homeCoverHeight;
