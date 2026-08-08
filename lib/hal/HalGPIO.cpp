@@ -261,14 +261,10 @@ bool HalGPIO::isXteinkDevice() const {
 }
 
 bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
-  // Boards without a power button (or M5Paper's latch circuit) cannot verify a
-  // hold; treat the wake as valid.
+  // Boards without a power button cannot verify a hold; treat the wake as valid.
   if (BoardConfig::ACTIVE.input.power < 0) {
     return true;
   }
-#if defined(FREEINK_DEVICE_M5PAPER) && FREEINK_DEVICE_M5PAPER
-  return true;
-#endif
   if (shortPressAllowed) {
     // Fast path - no duration check needed
     return true;
