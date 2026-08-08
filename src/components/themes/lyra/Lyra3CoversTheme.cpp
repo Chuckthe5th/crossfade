@@ -3,11 +3,13 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "activities/reader/EpubReaderUtils.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
@@ -107,6 +109,26 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         renderer.fillRoundedRect(tileX, tileY + Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection,
                                  tileWidth, dynamicTitleBoxHeight, cornerRadius, false, false, true, true,
                                  Color::LightGray);
+      }
+
+      if (SETTINGS.showCoverProgress) {
+        // Computed per-book here (not from the passed-in progressPercent, which only reflects
+        // whichever single book is selected) since all three covers show a bar simultaneously.
+        // Only a 5px gap exists between the cover's bottom edge and the title text below it --
+        // the bar takes 4px of it, biased to the top so a 1px clearance survives to the text.
+        const float bookProgress = EpubReaderUtils::recentBookProgressPercent(recentBooks[i].path);
+        if (bookProgress >= 0.0f) {
+          constexpr int kBarHeight = 4;
+          const int barY = tileY + hPaddingInSelection + Lyra3CoversMetrics::values.homeCoverHeight;
+          const int barX = tileX + hPaddingInSelection;
+          const int barWidth = tileWidth - 2 * hPaddingInSelection;
+          const float clamped = std::clamp(bookProgress, 0.0f, 100.0f);
+          const int filledWidth = std::clamp(static_cast<int>((clamped / 100.0f) * barWidth), 0, barWidth);
+          renderer.fillRectDither(barX, barY, barWidth, kBarHeight, Color::LightGray);
+          if (filledWidth > 0) {
+            renderer.fillRect(barX, barY, filledWidth, kBarHeight, true);
+          }
+        }
       }
 
       int currentY = tileY + Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection + 5;

@@ -448,7 +448,7 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                     const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                     bool& bufferRestored, std::function<bool()> storeCoverBuffer,
-                                    float /*progressPercent*/) const {
+                                    float progressPercent) const {
   const int tileWidth = rect.width - 2 * LyraMetrics::values.contentSidePadding;
   const int tileHeight = rect.height;
   const int tileY = rect.y;
@@ -518,6 +518,21 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                               Color::LightGray);
       renderer.fillRoundedRect(tileX, tileY + LyraMetrics::values.homeCoverHeight + hPaddingInSelection, tileWidth,
                                hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
+    }
+
+    if (SETTINGS.showCoverProgress && progressPercent >= 0.0f) {
+      // hPaddingInSelection below the cover is the only reserved gap this theme has -- centered
+      // in it (2px margins on an 8px gap), never touching coverWidth/homeCoverHeight.
+      constexpr int kBarHeight = 4;
+      const int barY = tileY + hPaddingInSelection + LyraMetrics::values.homeCoverHeight +
+                       std::max(0, (hPaddingInSelection - kBarHeight) / 2);
+      const int barX = tileX + hPaddingInSelection;
+      const float clamped = std::clamp(progressPercent, 0.0f, 100.0f);
+      const int filledWidth = std::clamp(static_cast<int>((clamped / 100.0f) * coverWidth), 0, coverWidth);
+      renderer.fillRectDither(barX, barY, coverWidth, kBarHeight, Color::LightGray);
+      if (filledWidth > 0) {
+        renderer.fillRect(barX, barY, filledWidth, kBarHeight, true);
+      }
     }
 
     auto titleLines = renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textWidth, 3, EpdFontFamily::BOLD);

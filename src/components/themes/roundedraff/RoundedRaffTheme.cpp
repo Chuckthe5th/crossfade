@@ -128,7 +128,7 @@ bool RoundedRaffTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect
 void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                            bool& bufferRestored, std::function<bool()> storeCoverBuffer,
-                                           float /*progressPercent*/) const {
+                                           float progressPercent) const {
   const int tileWidth = rect.width - 2 * RoundedRaffMetrics::values.contentSidePadding;
   const int tileHeight = rect.height;
   const int tileY = rect.y;
@@ -198,6 +198,22 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
     renderer.fillRoundedRect(tileX, imgY + RoundedRaffMetrics::values.homeCoverHeight, tileWidth,
                              tileHeight - (imgY - tileY + RoundedRaffMetrics::values.homeCoverHeight), kRowRadius,
                              false, false, true, true, Color::LightGray);
+
+    if (SETTINGS.showCoverProgress && progressPercent >= 0.0f) {
+      // Drawn in the gap the corner-rounding fill above already reserves below the cover --
+      // centered in it, never touching coverWidth/homeCoverHeight themselves.
+      constexpr int kBarHeight = 4;
+      const int bottomGapY = imgY + RoundedRaffMetrics::values.homeCoverHeight;
+      const int bottomGapHeight = (tileY + tileHeight) - bottomGapY;
+      const int barY = bottomGapY + std::max(0, (bottomGapHeight - kBarHeight) / 2);
+      const int barX = tileX + (tileWidth - coverWidth) / 2;
+      const float clamped = std::clamp(progressPercent, 0.0f, 100.0f);
+      const int filledWidth = std::clamp(static_cast<int>((clamped / 100.0f) * coverWidth), 0, coverWidth);
+      renderer.fillRectDither(barX, barY, coverWidth, kBarHeight, Color::LightGray);
+      if (filledWidth > 0) {
+        renderer.fillRect(barX, barY, filledWidth, kBarHeight, true);
+      }
+    }
   } else {
     renderer.fillRoundedRect(tileX, tileY, tileWidth, tileHeight, kRowRadius, Color::LightGray);
     renderer.drawCenteredText(kTitleFontId, rect.y + rect.height / 2 - renderer.getLineHeight(kTitleFontId) / 2,
