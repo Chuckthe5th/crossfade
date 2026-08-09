@@ -12,28 +12,17 @@ constexpr ThemeMetrics makeValues() {
   v.menuRowHeight = 64;
   v.menuSpacing = 8;
   v.homeTopPadding = 28;
-  // The ONE height passed to HomeActivity::loadRecentCovers() (which pre-generates the SD-card
-  // thumbnail cache) and to every UITheme::getCoverThumbPath() lookup in LyraCarouselTheme.cpp --
-  // center and side covers alike draw a (downscaled) crop of this same cached bitmap rather than
-  // each requesting their own derived size. The two used to drift (draw code asked for
-  // kDisplayCenterH=488/kSideCoverH=390, cache only ever held homeCoverHeight=600), which is why
-  // every cover missed the cache and fell back to the placeholder icon.
-  //
-  // 600 (CrossInk's own value, unchanged since the initial port) doesn't fit either panel's real
-  // screen height (X3 792x528, X4 800x480) when run through CrossInk's OWN formula chain --
-  // verified by re-deriving that chain exactly (kCenterCoverH = homeCoverHeight-60,
-  // kBaseDisplayCenterH = 86% of that, kDisplayCenterH = min(+24, kCenterCoverH), same title
-  // -reservation and footer-stacking math as CrossInk's computeCenterCoverSlotRect/
-  // drawRecentBookCover) rather than the simplified 0.6-ratio, chrome-trimmed version this file
-  // used previously. This IS the CrossInk layout -- title, dots, percentage label, and the normal
-  // button-hints row all present, exactly as CrossInk ships it -- solved for the base height that
-  // makes CrossInk's own formula fit X4 (the tighter panel) instead of a copy-pasted 600 that
-  // doesn't. 263/325 below is that solve, ~10px margin against the icon menu's label on X4. X3's
-  // extra headroom (792x528 vs X4's 800x480) becomes bottom margin, not a bigger cover -- both
-  // panels share one compile-time constant, and the cache height has to be one fixed value
-  // regardless of which panel is running.
-  v.homeCoverHeight = 263;
-  v.homeCoverTileHeight = 325;
+  // CrossInk's own literal values, unchanged since the initial port. Run through CrossInk's own
+  // formula chain (kCenterCoverH = homeCoverHeight-60, kDisplayCenterH = min(86%+24, kCenterCoverH))
+  // the center cover rect alone (y=101, h=488 on X4) bottoms out at y=589. That fits comfortably:
+  // 792x528 and 800x480 (X3/X4's raw panel dims, landscape-native) are NOT the screen height --
+  // GfxRenderer runs Home in Portrait orientation, where getScreenHeight() returns the OTHER raw
+  // dimension (X3: 792px tall, X4: 800px tall; the smaller number, 528/480, is the logical width
+  // instead). Against the real 800px-tall (X4) / 792px-tall (X3) portrait screen, y=589 lands with
+  // ~200px to spare before the icon-menu row -- matching CrossInk's own reference photo. 600 is
+  // correct as-is; do not re-solve it for a smaller value.
+  v.homeCoverHeight = 600;
+  v.homeCoverTileHeight = 660;
   v.homeRecentBooksCount = 3;
   v.keyboardKeyHeight = 50;
   v.keyboardCenteredText = true;
@@ -59,9 +48,9 @@ constexpr ThemeMetrics values = makeValues();
 // The perspective skew (GfxRenderer::drawPerspectiveBitmap, ported from CrossInk's own
 // GfxRenderer -- see its declaration), the two-tier center/side cover sizing below, and the
 // bidirectional (both-axis) cover cropping in the .cpp are straight ports of CrossInk's own
-// formulas, solved against this fork's actual homeCoverHeight rather than copying its literal
-// pixel constants (which were tuned for a taller screen than X3/X4 -- see homeCoverHeight's
-// comment above).
+// formulas, using CrossInk's own literal pixel constants (including homeCoverHeight -- see its
+// comment above: it fits both X3 and X4's real portrait screen height with room to spare, so
+// none of this needed re-solving for a smaller value).
 class LyraCarouselTheme : public LyraTheme {
  public:
   // Two-tier max/display sizing, ported from CrossInk exactly: kCenterCoverW/H is the "cache
