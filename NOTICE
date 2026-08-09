@@ -12,7 +12,14 @@ License. Navigation is CrossFade's own existing tab+list button scheme (see Sett
 The Lyra Carousel home theme (src/components/themes/lyra/LyraCarouselTheme.h/.cpp) is a functional
 port of CrossInk's Lyra Carousel theme (https://github.com/uxjulia/CrossInk), also a fork of
 CrossPoint, licensed under the MIT License. Adapted rather than copied wholesale -- see that file's
-own header comment for what differs (no perspective-warped side covers, no frame-cache
-pre-rendering, no reading-stats text) and why.
+own header comment for what differs (no frame-cache pre-rendering, no reading-stats text) and why.
+
+GfxRenderer::drawPerspectiveBitmap (lib/GfxRenderer/GfxRenderer.h/.cpp), the trapezoid-warped
+bitmap primitive behind Lyra Carousel's receding side covers, and the side-cover proportions that
+use it, are ported from CrossInk's own GfxRenderer and LyraCarouselTheme
+(https://github.com/uxjulia/CrossInk), also a fork of CrossPoint, licensed under the MIT License --
+adapted to this fork's own row-buffer allocation pattern (malloc/free per call, matching this
+file's existing drawBitmap, rather than CrossInk's pooled scratch allocator, which this fork
+doesn't have); the per-column perspective math itself is unchanged.
 
 CrossFade modifications are likewise released under the MIT License.

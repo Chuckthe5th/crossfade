@@ -24,8 +24,9 @@
 namespace {
 constexpr int kDisplayCenterW = LyraCarouselTheme::kDisplayCenterW;
 constexpr int kDisplayCenterH = LyraCarouselTheme::kDisplayCenterH;
-constexpr int kSideCoverMaxW = LyraCarouselTheme::kSideCoverW;
-constexpr int kSideCoverMaxH = LyraCarouselTheme::kSideCoverH;
+constexpr int kNearSideW = LyraCarouselTheme::kNearSideW;
+constexpr int kNearSideInnerH = LyraCarouselTheme::kNearSideInnerH;
+constexpr int kNearSideOuterH = LyraCarouselTheme::kNearSideOuterH;
 // The height every cover lookup in this file must use -- see LyraCarouselMetrics's homeCoverHeight
 // comment for why this has to match what HomeActivity::loadRecentCovers() actually pre-generates.
 constexpr int kCoverLookupHeight = LyraCarouselMetrics::values.homeCoverHeight;
@@ -127,6 +128,42 @@ Rect computeCenterCoverSlotRect(const GfxRenderer& renderer, const Rect rect) {
   return Rect{centerX, centerDrawY, kDisplayCenterW, kDisplayCenterH};
 }
 
+// Ported from CrossInk's LyraCarouselTheme.cpp verbatim (theme-local helper, not a GfxRenderer
+// primitive -- unlike drawPerspectiveBitmap, this only needs drawLine/fillRect, both already
+// public). Outlines a trapezoid: slanted top/bottom edges between (x, y+topLeft) and
+// (rightX, y+topRight) / bottoms, vertical edges at each end's own height, with a 2px erase gap
+// below so an adjacent cell's dishing doesn't visually merge with this one's border.
+void drawPerspectiveOutline(const GfxRenderer& renderer, const int x, const int y, const int width,
+                            const int leftHeight, const int rightHeight) {
+  const int maxHeight = std::max(leftHeight, rightHeight);
+  const int topLeft = (maxHeight - leftHeight) / 2;
+  const int topRight = (maxHeight - rightHeight) / 2;
+  const int bottomLeft = topLeft + leftHeight - 1;
+  const int bottomRight = topRight + rightHeight - 1;
+  const int rightX = x + width - 1;
+
+  renderer.drawLine(x, y + topLeft, rightX, y + topRight, kSideOutlineW, true);
+  renderer.drawLine(x, y + bottomLeft, rightX, y + bottomRight, kSideOutlineW, true);
+  renderer.fillRect(x, y + topLeft, kSideOutlineW, leftHeight, true);
+  renderer.fillRect(rightX - kSideOutlineW + 1, y + topRight, kSideOutlineW, rightHeight, true);
+  renderer.fillRect(x, y + maxHeight + 1, width, 2, false);
+}
+
+// Ported from CrossInk verbatim: the no-cover fallback for a perspective side slot -- fills each
+// column to its own linearly-interpolated height (same per-column math drawPerspectiveBitmap uses
+// for real cover art), producing a solid trapezoid silhouette instead of a plain rectangle.
+void fillPerspectiveSilhouette(const GfxRenderer& renderer, const int x, const int y, const int width,
+                               const int leftHeight, const int rightHeight) {
+  const int maxHeight = std::max(leftHeight, rightHeight);
+  renderer.fillRect(x, y, width, maxHeight, false);
+  for (int dx = 0; dx < width; ++dx) {
+    const int columnHeight =
+        (width <= 1) ? leftHeight : (leftHeight + ((rightHeight - leftHeight) * dx) / (width - 1));
+    const int top = y + (maxHeight - columnHeight) / 2;
+    renderer.fillRect(x + dx, top, 1, columnHeight, true);
+  }
+}
+
 // Loads book's cover thumbnail -- always at kCoverLookupHeight, the one height
 // HomeActivity::loadRecentCovers() pre-generates for this theme, regardless of targetRect's own
 // height (which may be smaller, e.g. a downscaled side cover; drawBitmap scales to fit either way)
@@ -183,26 +220,52 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
   const Rect centerCoverSlotRect = computeCenterCoverSlotRect(renderer, rect);
   const Rect centerRect = shrinkCenterCoverRect(centerCoverSlotRect);
 
-  // --- Side covers: plain scaled rectangles, not CrossInk's perspective-warped trapezoids (see
-  // the header's class comment). Still reads as a carousel -- smaller, offset covers flanking the
-  // center one -- just without the skew. ---
-  const int sideY = centerCoverSlotRect.y + (kDisplayCenterH - kSideCoverMaxH) / 2;
-  const int leftX = centerCoverSlotRect.x - kSideCoverMaxW + 20;
-  const int rightX = centerCoverSlotRect.x + kDisplayCenterW - 20;
+  // --- Side covers: perspective-skewed trapezoids, ported from CrossInk (see the header's class
+  // comment and GfxRenderer::drawPerspectiveBitmap's declaration). Near side only --
+  // homeRecentBooksCount caps this fork's carousel at 3 books, so CrossInk's "far" slots (a
+  // 4th/5th book) never apply here. ---
+  const int sideMaxHeight = std::max(kNearSideInnerH, kNearSideOuterH);
+  const int sideTileY = centerCoverSlotRect.y + (kDisplayCenterH - sideMaxHeight) / 2;
+  constexpr int kNearOverlap = 4;
+  constexpr int kNearCoverInset = 10;
+  const int baseLeftNearX = centerCoverSlotRect.x - kNearSideW + kNearOverlap;
+  const int baseRightNearX = centerCoverSlotRect.x + kDisplayCenterW - kNearOverlap;
+  const int leftNearX = baseLeftNearX + kNearCoverInset;
+  const int rightNearX = baseRightNearX - kNearCoverInset;
 
-  auto drawSideCover = [&](const int idx, const int x) {
+  auto drawSideCover = [&](const int idx, const int x, const int leftHeight, const int rightHeight) {
     const RecentBook& book = recentBooks[idx];
-    renderer.fillRect(x, sideY, kSideCoverMaxW, kSideCoverMaxH, false);
-    if (!drawCroppedCover(renderer, book.coverBmpPath, Rect{x, sideY, kSideCoverMaxW, kSideCoverMaxH})) {
-      renderer.fillRect(x, sideY + kSideCoverMaxH / 3, kSideCoverMaxW, 2 * kSideCoverMaxH / 3, true);
-      renderer.drawIcon(CoverIcon, x + kSideCoverMaxW / 2 - 16, sideY + kSideCoverMaxH / 3 + 14, 32);
+    const int sideHeight = std::max(leftHeight, rightHeight);
+    if (!book.coverBmpPath.empty()) {
+      const std::string thumbPath = UITheme::getCoverThumbPath(book.coverBmpPath, kCoverLookupHeight);
+      HalFile file;
+      if (Storage.openFileForRead("HOME", thumbPath, file)) {
+        Bitmap bitmap(file);
+        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+          renderer.fillRect(x, sideTileY, kNearSideW, sideHeight, false);
+          renderer.drawPerspectiveBitmap(bitmap, x, sideTileY, kNearSideW, leftHeight, rightHeight);
+          renderer.maskRoundedRectOutsideCorners(x, sideTileY, kNearSideW, sideHeight, kSideCornerRadius,
+                                                 Color::White);
+          file.close();
+          drawPerspectiveOutline(renderer, x, sideTileY, kNearSideW, leftHeight, rightHeight);
+          return;
+        }
+        file.close();
+      }
     }
-    renderer.drawRoundedRect(x, sideY, kSideCoverMaxW, kSideCoverMaxH, kSideOutlineW, kSideCornerRadius, true);
+    fillPerspectiveSilhouette(renderer, x, sideTileY, kNearSideW, leftHeight, rightHeight);
+    renderer.maskRoundedRectOutsideCorners(x, sideTileY, kNearSideW, sideHeight, kSideCornerRadius, Color::White);
   };
-  // Matches CrossInk's own gating: with exactly 2 books, only draw one side (both slots would
-  // otherwise show the same "other" book).
-  if (bookCount >= 2) drawSideCover((centerIdx + bookCount - 1) % bookCount, leftX);
-  if (bookCount >= 3) drawSideCover((centerIdx + 1) % bookCount, rightX);
+  // Matches CrossInk's own gating (2 books -> one side only, both slots would otherwise show the
+  // same "other" book) and its exact parameter order: the left cover's near (right, facing
+  // center) edge gets the taller Inner height, its far (left) edge the shorter Outer height,
+  // receding away from center; the right cover mirrors this. Not rederived -- ported as given.
+  if (bookCount >= 2) {
+    drawSideCover((centerIdx + bookCount - 1) % bookCount, leftNearX, kNearSideInnerH, kNearSideOuterH);
+  }
+  if (bookCount >= 3) {
+    drawSideCover((centerIdx + 1) % bookCount, rightNearX, kNearSideOuterH, kNearSideInnerH);
+  }
 
   // --- Center cover ---
   const RecentBook& centerBook = recentBooks[centerIdx];
@@ -315,4 +378,11 @@ int LyraCarouselTheme::getMenuBottomEdge(const GfxRenderer&, const int menuTop, 
   // to add here -- returning menuTop makes HomeActivity::onEnter()'s pinned-row fit-check reduce to
   // "does the cover tile fit," the only real constraint for this theme.
   return menuTop;
+}
+
+void LyraCarouselTheme::drawButtonHints(GfxRenderer&, const char*, const char*, const char*, const char*) const {
+  // See the declaration's comment: intentionally does nothing. buttonHintsHeight is already 0 in
+  // this theme's metrics (so layout math reclaims the space), but BaseTheme::drawButtonHints draws
+  // at a position derived from BaseMetrics regardless of the active theme's metrics -- without
+  // this override it would still draw the hint row on top of whatever this theme now puts there.
 }

@@ -217,6 +217,13 @@ class GfxRenderer {
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
                   float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
+  // Draws bitmap into a trapezoid instead of a rectangle: column dx (0..w-1) gets its own height,
+  // linearly interpolated between hL (at dx=0) and hR (at dx=w-1), vertically centered within the
+  // taller of the two -- e.g. Lyra Carousel's receding side covers. Ported from CrossInk's
+  // GfxRenderer (same fork lineage) with one adaptation: uses malloc/free per call, matching this
+  // file's own drawBitmap, rather than CrossInk's pooled scratch-buffer allocator, which this fork
+  // doesn't have.
+  void drawPerspectiveBitmap(const Bitmap& bitmap, int x, int y, int w, int hL, int hR) const;
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 
   // Snapshot / restore a screen-coordinate framebuffer region (byte-aligned in

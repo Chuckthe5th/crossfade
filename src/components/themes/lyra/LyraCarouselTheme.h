@@ -20,23 +20,21 @@ constexpr ThemeMetrics makeValues() {
   // every cover missed the cache and fell back to the placeholder icon.
   //
   // 600/660 (the original values, unchanged since the initial port) also didn't fit either panel:
-  // X3 is 792x528, X4 is 800x480 -- both shorter than a 660px tile. Getting the cover meaningfully
-  // larger than the ~150-205 range past chrome trimming meant cutting two more things: the
-  // separate title text above the cover (dropped -- real cover art already shows the title; the
-  // no-cover fallback still draws it inline, see drawRecentBookCover) and the dot-pagination row
-  // (dropped -- the visible side covers already show "book before/after this one," making the
-  // dots redundant), plus tightening the icon-menu's own padding (see kMenuRowDrop/kMenuIconSize/
-  // kMenuIconPad in the .cpp). Deliberately NOT cut: the button-hints row -- X3/X4 have no touch,
-  // so it's the only way a first-time user learns which physical button does what -- and the
-  // progress bar, kept per instruction even without cutting the icon-only menu's own vertical
-  // footprint. 320/335 below fit X4 (the tighter panel) with a 10px margin against the icon menu's
-  // label; see LyraCarouselTheme::getMenuBottomEdge for why the icon-only button menu doesn't need
-  // reserving additional space here for the pinned-book row. X3's 48px of extra headroom (792x528
-  // vs X4's 800x480) becomes bottom margin, not a bigger cover -- both panels share one
-  // compile-time constant, and the cache height has to be one fixed value regardless of which
-  // panel is running.
-  v.homeCoverHeight = 320;
-  v.homeCoverTileHeight = 335;
+  // X3 is 792x528, X4 is 800x480 -- both shorter than a 660px tile. Getting the cover close to
+  // CrossInk's own proportions (near-full-height) took, on top of the earlier chrome trims
+  // (dropped title text and dot row, tightened icon-menu padding -- see the .cpp), one more cut:
+  // buttonHintsHeight is 0 for this theme specifically (see drawButtonHints's override) -- the
+  // icon-only menu already names the selected action, unlike every other theme's plain icon row,
+  // so the hint row CrossFade normally shows non-touch users which physical button does what is
+  // judged redundant here. Every other theme keeps it. 355/375 below fit X4 (the tighter panel)
+  // with a ~15px margin against the icon menu's label; see LyraCarouselTheme::getMenuBottomEdge
+  // for why the icon-only button menu doesn't need reserving additional space here for the
+  // pinned-book row. X3's 48px of extra headroom (792x528 vs X4's 800x480) becomes bottom margin,
+  // not a bigger cover -- both panels share one compile-time constant, and the cache height has to
+  // be one fixed value regardless of which panel is running.
+  v.homeCoverHeight = 355;
+  v.homeCoverTileHeight = 375;
+  v.buttonHintsHeight = 0;
   v.homeRecentBooksCount = 3;
   v.keyboardKeyHeight = 50;
   v.keyboardCenteredText = true;
@@ -47,18 +45,17 @@ constexpr ThemeMetrics values = makeValues();
 }  // namespace LyraCarouselMetrics
 
 // Functional port of CrossInk's Lyra Carousel home theme (https://github.com/uxjulia/CrossInk,
-// also a CrossPoint fork -- see NOTICE): a large center cover flanked by smaller side covers and a
-// bottom icon-only button menu. Differences from CrossInk's version:
-//  - True perspective-warped side covers. CrossInk added a drawPerspectiveBitmap primitive to its
-//    GfxRenderer for this; this fork doesn't have it, and adding a new low-level framebuffer
-//    primitive without hardware to verify it against felt like the wrong tradeoff. Side covers
-//    here are plain scaled rectangles instead -- still reads as a carousel, just not skewed.
+// also a CrossPoint fork -- see NOTICE): a large center cover flanked by smaller perspective
+// -skewed side covers and a bottom icon-only button menu. Differences from CrossInk's version:
 //  - The disk-backed frame cache that pre-renders adjacent carousel frames for instant scrolling
 //    (CrossInk's HomeActivity.cpp: gCarouselCache, sliding-window pre-render, setPreRenderIndex).
 //    This theme redraws normally on selection change, like every other CrossFade theme does.
 //  - No separate title text above the cover and no dot-pagination row (both cut in favor of a
 //    larger cover -- see homeCoverHeight's comment above); no reading-stats "time read" label
 //    (this fork has no reading-stats subsystem to source it from).
+// The perspective skew itself (GfxRenderer::drawPerspectiveBitmap, ported from CrossInk's own
+// GfxRenderer -- see its declaration) and the near-side cover proportions below (26%/90%/82%) are
+// straight ports of CrossInk's tuned values, applied to this fork's own cover dimensions.
 class LyraCarouselTheme : public LyraTheme {
  public:
   static constexpr int kCenterCoverVisualInset = 10;
@@ -72,11 +69,15 @@ class LyraCarouselTheme : public LyraTheme {
   // bitmap fills its box exactly, regardless of what homeCoverHeight is tuned to.
   static constexpr int kDisplayCenterH = LyraCarouselMetrics::values.homeCoverHeight;
   static constexpr int kDisplayCenterW = static_cast<int>(kDisplayCenterH * 0.6f);
-  // Side covers: a fixed proportion of the center cover's height (not a second, never-pre
-  // -generated cache entry -- drawn from the SAME cached thumbnail, downscaled), width at the
-  // same 0.6:1 ratio as the center cover for the same reason.
-  static constexpr int kSideCoverH = (LyraCarouselMetrics::values.homeCoverHeight * 70) / 100;
-  static constexpr int kSideCoverW = static_cast<int>(kSideCoverH * 0.6f);
+  // Near-side cover proportions -- CrossInk's own tuned ratios (26% of center width; 90%/82% of
+  // center height for the edge closer to/farther from the center cover), applied to this fork's
+  // own kDisplayCenterW/H instead of CrossInk's separate pre-shrink "max" dimensions (this fork
+  // has no equivalent -- see kDisplayCenterH's comment on why that indirection was dropped).
+  // "Far" side covers (a 4th/5th book, CrossInk's kFarSideW/kFarSideInnerH/kFarSideOuterH) aren't
+  // ported: homeRecentBooksCount caps this fork's carousel at 3 books, so far slots never show.
+  static constexpr int kNearSideW = (kDisplayCenterW * 26) / 100;
+  static constexpr int kNearSideInnerH = (kDisplayCenterH * 90) / 100;
+  static constexpr int kNearSideOuterH = (kDisplayCenterH * 82) / 100;
 
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
@@ -84,6 +85,14 @@ class LyraCarouselTheme : public LyraTheme {
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon) const override;
+  // No-op: see homeCoverHeight's comment on why this theme drops the button-hints row that every
+  // other theme shows non-touch users. BaseTheme::drawButtonHints doesn't consult per-theme
+  // metrics (it draws at a fixed position derived from BaseMetrics), so zeroing
+  // buttonHintsHeight alone only fixes this theme's OWN layout math -- drawButtonHints itself
+  // still has to be suppressed here, or it would draw over content this theme now puts in that
+  // reclaimed space.
+  void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                       const char* btn4) const override;
   // The icon-only menu (see drawButtonMenu) is anchored to the screen's real bottom edge and its
   // vertical footprint doesn't grow with itemCount -- adding the pinned-book row just narrows each
   // icon tile, it never needs another row's worth of height. BaseTheme's default assumes a
