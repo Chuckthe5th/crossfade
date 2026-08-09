@@ -26,14 +26,22 @@ constexpr ThemeMetrics makeValues() {
   // buttonHintsHeight is 0 for this theme specifically (see drawButtonHints's override) -- the
   // icon-only menu already names the selected action, unlike every other theme's plain icon row,
   // so the hint row CrossFade normally shows non-touch users which physical button does what is
-  // judged redundant here. Every other theme keeps it. 355/375 below fit X4 (the tighter panel)
-  // with a ~15px margin against the icon menu's label; see LyraCarouselTheme::getMenuBottomEdge
-  // for why the icon-only button menu doesn't need reserving additional space here for the
-  // pinned-book row. X3's 48px of extra headroom (792x528 vs X4's 800x480) becomes bottom margin,
-  // not a bigger cover -- both panels share one compile-time constant, and the cache height has to
-  // be one fixed value regardless of which panel is running.
-  v.homeCoverHeight = 355;
-  v.homeCoverTileHeight = 375;
+  // judged redundant here. Every other theme keeps it.
+  //
+  // 360/380 is the vertical ceiling on X4 (the tighter panel), ~10px margin against the icon
+  // menu's label. It is NOT also what fills the screen width to the edges: solving the same
+  // problem for width (kDisplayCenterW/kNearSideW reaching X3's screen edges minus 5px) gives
+  // H=~888 -- 2.5x taller than the vertical ceiling allows. A 0.6:1 portrait cover simply cannot
+  // both near-fill an 800px-wide screen AND fit above the icon menu on a 480-528px-tall one;
+  // that's arithmetic, not a tuning gap. Vertical is the binding axis by a wide margin, so it sets
+  // the scale -- real, unavoidable horizontal margin (~250px per side on X4) is what's left over,
+  // not a bug. See LyraCarouselTheme::getMenuBottomEdge for why the icon-only button menu doesn't
+  // need reserving additional space here for the pinned-book row. X3's 48px of extra headroom
+  // (792x528 vs X4's 800x480) becomes bottom margin, not a bigger cover -- both panels share one
+  // compile-time constant, and the cache height has to be one fixed value regardless of which
+  // panel is running.
+  v.homeCoverHeight = 360;
+  v.homeCoverTileHeight = 380;
   v.buttonHintsHeight = 0;
   v.homeRecentBooksCount = 3;
   v.keyboardKeyHeight = 50;
