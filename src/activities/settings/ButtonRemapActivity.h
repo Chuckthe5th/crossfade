@@ -7,13 +7,9 @@
 
 class ButtonRemapActivity final : public Activity {
  public:
-  // forReader: targets SETTINGS.readerFrontButton* (4 roles: Back/Confirm/Left/Right) instead of
-  // the system frontButton* fields (6 roles: those 4 plus Up/Down -- menu-nav remapping). The
-  // press-to-assign wizard, duplicate checking, and labels are otherwise identical; only the role
-  // count, which settings fields get read/written, and the escape-hatch input differ (see
-  // roleCount() and loop()): the reader wizard keeps the original fixed Up=reset/Down=cancel side
-  // -button shortcut since it never reassigns Up/Down; the 6-role wizard can't rely on Up/Down
-  // being fixed anymore, so it uses Power=cancel instead, with no quick-reset shortcut.
+  // forReader: targets SETTINGS.readerFrontButton* instead of the system frontButton* fields --
+  // everything else (the press-to-assign wizard, duplicate checking, reset/cancel) is identical,
+  // only which four settings fields get read from and written to differs.
   explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool forReader = false)
       : Activity("ButtonRemap", renderer, mappedInput), forReader(forReader) {}
 
@@ -24,16 +20,13 @@ class ButtonRemapActivity final : public Activity {
 
  private:
   const bool forReader;
-  // 4 roles (Back/Confirm/Left/Right) for the reader table, 6 (plus Up/Down) for the system one.
-  uint8_t roleCount() const { return forReader ? 4 : 6; }
 
   // Rendering task state.
 
   // Index of the logical role currently awaiting input.
   uint8_t currentStep = 0;
-  // Temporary mapping from logical role -> hardware button index. Sized for the larger (6-role)
-  // case; the reader wizard only ever touches indices [0, roleCount()).
-  uint8_t tempMapping[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  // Temporary mapping from logical role -> hardware button index.
+  uint8_t tempMapping[4] = {0xFF, 0xFF, 0xFF, 0xFF};
   // Error banner timing (used when reassigning duplicate buttons).
   unsigned long errorUntil = 0;
   std::string errorMessage;

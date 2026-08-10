@@ -39,12 +39,11 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       // Logical Right maps to user-configured front button.
       return (gpio.*fn)(useReaderMapping ? SETTINGS.readerFrontButtonRight : SETTINGS.frontButtonRight);
     case Button::Up:
-      // Logical Up maps to user-configured hardware (menu-nav remap) -- system-wide, no reader
-      // -specific override (see SETTINGS.frontButtonUp's comment). Page-turning is untouched:
-      // it reads HalGPIO::BTN_UP/DOWN directly via PageBack/PageForward below, not through here.
-      return (gpio.*fn)(SETTINGS.frontButtonUp);
+      // Side buttons remain fixed for Up/Down.
+      return (gpio.*fn)(HalGPIO::BTN_UP);
     case Button::Down:
-      return (gpio.*fn)(SETTINGS.frontButtonDown);
+      // Side buttons remain fixed for Up/Down.
+      return (gpio.*fn)(HalGPIO::BTN_DOWN);
     case Button::Power:
       // Power button bypasses remapping.
       return (gpio.*fn)(HalGPIO::BTN_POWER);
@@ -355,20 +354,6 @@ int MappedInputManager::getPressedFrontButton() const {
   }
   if (gpio.wasPressed(HalGPIO::BTN_RIGHT)) {
     return HalGPIO::BTN_RIGHT;
-  }
-  return -1;
-}
-
-int MappedInputManager::getPressedNavButton() const {
-  const int frontButton = getPressedFrontButton();
-  if (frontButton >= 0) {
-    return frontButton;
-  }
-  if (gpio.wasPressed(HalGPIO::BTN_UP)) {
-    return HalGPIO::BTN_UP;
-  }
-  if (gpio.wasPressed(HalGPIO::BTN_DOWN)) {
-    return HalGPIO::BTN_DOWN;
   }
   return -1;
 }

@@ -28,10 +28,9 @@ void copyToField(char* dest, const char* src, const size_t maxLen) {
   dest[maxLen - 1] = '\0';
 }
 
-template <size_t N>
-bool hasDuplicate(const uint8_t (&mapping)[N]) {
-  for (size_t i = 0; i < N; i++) {
-    for (size_t j = i + 1; j < N; j++) {
+bool hasDuplicate(const uint8_t (&mapping)[4]) {
+  for (size_t i = 0; i < 4; i++) {
+    for (size_t j = i + 1; j < 4; j++) {
       if (mapping[i] == mapping[j]) return true;
     }
   }
@@ -55,15 +54,13 @@ void CrossPointSettings::migrateLegacySettingsFile() {
 }
 
 void CrossPointSettings::validateFrontButtonMapping(CrossPointSettings& settings) {
-  const uint8_t mapping[] = {settings.frontButtonBack,  settings.frontButtonConfirm, settings.frontButtonLeft,
-                             settings.frontButtonRight, settings.frontButtonUp,      settings.frontButtonDown};
+  const uint8_t mapping[] = {settings.frontButtonBack, settings.frontButtonConfirm, settings.frontButtonLeft,
+                             settings.frontButtonRight};
   if (hasDuplicate(mapping)) {
     settings.frontButtonBack = FRONT_HW_BACK;
     settings.frontButtonConfirm = FRONT_HW_CONFIRM;
     settings.frontButtonLeft = FRONT_HW_LEFT;
     settings.frontButtonRight = FRONT_HW_RIGHT;
-    settings.frontButtonUp = FRONT_HW_UP;
-    settings.frontButtonDown = FRONT_HW_DOWN;
   }
 
   // Independent of the system mapping above: a collision here only resets the reader-specific
@@ -131,8 +128,6 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonConfirm"] = frontButtonConfirm;
   doc["frontButtonLeft"] = frontButtonLeft;
   doc["frontButtonRight"] = frontButtonRight;
-  doc["frontButtonUp"] = frontButtonUp;
-  doc["frontButtonDown"] = frontButtonDown;
   // Reader-specific front button remap — same reasoning, managed by the same sub-activity in
   // forReader mode. readerFrontButtonsEnabled itself IS in SettingsList (a plain toggle), so the
   // generic loop above already handles it.
@@ -252,19 +247,15 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   frontButtonLeft = clamp(doc["frontButtonLeft"] | (uint8_t)FRONT_HW_LEFT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_LEFT);
   frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
-  frontButtonUp = clamp(doc["frontButtonUp"] | (uint8_t)FRONT_HW_UP, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_UP);
-  frontButtonDown = clamp(doc["frontButtonDown"] | (uint8_t)FRONT_HW_DOWN, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_DOWN);
-  // Reader-specific front button remap — same reasoning as above, but clamped to the original 4
-  // front-only values: the reader table has no Up/Down concept (page-turning stays on
-  // sideButtonLayout, untouched by menu-nav remapping), so 4/5 are never valid here.
+  // Reader-specific front button remap — same reasoning as above.
   readerFrontButtonBack =
-      clamp(doc["readerFrontButtonBack"] | (uint8_t)FRONT_HW_BACK, FRONT_ONLY_HARDWARE_COUNT, FRONT_HW_BACK);
+      clamp(doc["readerFrontButtonBack"] | (uint8_t)FRONT_HW_BACK, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_BACK);
   readerFrontButtonConfirm =
-      clamp(doc["readerFrontButtonConfirm"] | (uint8_t)FRONT_HW_CONFIRM, FRONT_ONLY_HARDWARE_COUNT, FRONT_HW_CONFIRM);
+      clamp(doc["readerFrontButtonConfirm"] | (uint8_t)FRONT_HW_CONFIRM, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_CONFIRM);
   readerFrontButtonLeft =
-      clamp(doc["readerFrontButtonLeft"] | (uint8_t)FRONT_HW_LEFT, FRONT_ONLY_HARDWARE_COUNT, FRONT_HW_LEFT);
+      clamp(doc["readerFrontButtonLeft"] | (uint8_t)FRONT_HW_LEFT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_LEFT);
   readerFrontButtonRight =
-      clamp(doc["readerFrontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_ONLY_HARDWARE_COUNT, FRONT_HW_RIGHT);
+      clamp(doc["readerFrontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
 
   // Reader font size — an actual point size since 1.5. Files written by 1.4 and

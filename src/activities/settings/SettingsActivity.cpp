@@ -75,7 +75,7 @@ void SettingsActivity::rebuildSettingsLists() {
   // Append device-only ACTION items
   if (!BoardConfig::hasTouch()) {
     controlsSettings.insert(controlsSettings.begin(),
-                            SettingInfo::Action(StrId::STR_REMAP_MENU_NAV, SettingAction::RemapFrontButtons));
+                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
     controlsSettings.insert(
         controlsSettings.begin() + 1,
         SettingInfo::Toggle(StrId::STR_READER_FRONT_BUTTONS_ENABLED, &CrossPointSettings::readerFrontButtonsEnabled,

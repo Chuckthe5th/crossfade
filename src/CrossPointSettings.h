@@ -78,21 +78,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     FRONT_BUTTON_LAYOUT_COUNT
   };
 
-  // Navigation button hardware identifiers (for remapping). Values match HalGPIO::BTN_* exactly
-  // (BTN_BACK=0..BTN_DOWN=5) so a stored value can be passed straight through to HalGPIO calls
-  // with no translation. "FRONT_" is legacy naming from when this only covered the 4 front
-  // buttons -- FRONT_HW_UP/DOWN extend it to the 2 side buttons for menu-nav remapping; reader
-  // front-button remapping still only uses the original 4.
+  // Front button hardware identifiers (for remapping)
   enum FRONT_BUTTON_HARDWARE {
     FRONT_HW_BACK = 0,
     FRONT_HW_CONFIRM = 1,
     FRONT_HW_LEFT = 2,
     FRONT_HW_RIGHT = 3,
-    // Alias, not a distinct button: equals the count of front-only values (0..3) above, for
-    // clamping reader-specific fields (which never get Up/Down) to that narrower range.
-    FRONT_ONLY_HARDWARE_COUNT = 4,
-    FRONT_HW_UP = 4,
-    FRONT_HW_DOWN = 5,
     FRONT_BUTTON_HARDWARE_COUNT
   };
 
@@ -240,12 +231,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t frontButtonConfirm = FRONT_HW_CONFIRM;
   uint8_t frontButtonLeft = FRONT_HW_LEFT;
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
-  // Menu-nav remap for the 2 side buttons (Up/Down roles) -- system-wide only, no reader
-  // -specific override: reader page-turning owns the side buttons via sideButtonLayout above and
-  // is untouched by this; these two only affect Button::Up/Down (list/menu navigation, including
-  // the Lyra Carousel's level-switch), not PageBack/PageForward.
-  uint8_t frontButtonUp = FRONT_HW_UP;
-  uint8_t frontButtonDown = FRONT_HW_DOWN;
   // Reader-specific front button remap (overrides the system mapping above, while in reader
   // activities only). readerFrontButtonsEnabled = 0 means the reader uses the system mapping --
   // the four hardware values below can hold a previously-set custom mapping even while disabled,
