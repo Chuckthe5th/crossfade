@@ -50,6 +50,11 @@ void SettingsActivity::rebuildSettingsLists() {
   for (auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries)) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
+      // Meaningless with grouping off (no series exist to start in) -- hidden entirely rather
+      // than shown disabled, matching pwrBtnFootnoteBack's precedent below for the same situation.
+      if (setting.valuePtr == &CrossPointSettings::browseBooksStartInSeries && !SETTINGS.groupBySeries) {
+        continue;
+      }
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
       // Settings merged into "Text Settings"
@@ -63,11 +68,6 @@ void SettingsActivity::rebuildSettingsLists() {
       }
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
-      // Meaningless with grouping off (no series exist to start in) -- hidden entirely rather
-      // than shown disabled, matching pwrBtnFootnoteBack's precedent above for the same situation.
-      if (setting.valuePtr == &CrossPointSettings::browseBooksStartInSeries && !SETTINGS.groupBySeries) {
-        continue;
-      }
       systemSettings.push_back(setting);
     }
   }
