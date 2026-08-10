@@ -106,7 +106,7 @@ void OpdsBookBrowserActivity::loop() {
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      state == BrowserState::CHECK_WIFI ? onGoHome() : navigateBack();
+      state == BrowserState::CHECK_WIFI ? goBackOrHome() : navigateBack();
     }
     return;
   }
@@ -326,9 +326,17 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   fetchFeed(currentPath);
 }
 
+void OpdsBookBrowserActivity::goBackOrHome() {
+  if (hasParentActivity) {
+    finish();
+  } else {
+    onGoHome();
+  }
+}
+
 void OpdsBookBrowserActivity::navigateBack() {
   if (navigationHistory.empty()) {
-    onGoHome();
+    goBackOrHome();
   } else {
     currentPath = navigationHistory.back();
     navigationHistory.pop_back();

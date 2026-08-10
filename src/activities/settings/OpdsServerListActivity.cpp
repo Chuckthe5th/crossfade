@@ -129,7 +129,14 @@ void OpdsServerListActivity::handleSelection() {
     if (selectedIndex < serverCount) {
       const auto* server = OPDS_STORE.getServer(static_cast<size_t>(selectedIndex));
       if (server) {
-        activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
+        // Push (not replaceActivity) so backing out of the browser returns here instead of
+        // wiping this activity and its own parent (SettingsActivity) off the stack straight to
+        // Home -- hasParentActivity=true tells the browser to finish() back to us on its own
+        // Back-to-root, instead of the top-level onGoHome() it uses when launched without a
+        // caller to return to (see ActivityManager::goToBrowser()'s single-server shortcut).
+        startActivityForResult(
+            std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server, /*hasParentActivity=*/true),
+            [](const ActivityResult&) {});
       }
     }
     return;
