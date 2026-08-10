@@ -122,7 +122,7 @@ void ButtonRemapActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
                  I18N.get(forReader ? StrId::STR_REMAP_READER_FRONT_BUTTONS : StrId::STR_REMAP_MENU_NAV));
   GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
-                    tr(forReader ? STR_REMAP_PROMPT : STR_REMAP_PROMPT_NAV));
+                    I18N.get(forReader ? StrId::STR_REMAP_PROMPT : StrId::STR_REMAP_PROMPT_NAV));
 
   int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
   int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.verticalSpacing;
