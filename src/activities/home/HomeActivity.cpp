@@ -9,6 +9,7 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include "RecentBooksStore.h"
 #include "activities/reader/EpubReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/themes/lyra/LyraCarouselTheme.h"
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
@@ -67,6 +69,13 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   bool showingLoading = false;
   Rect popupRect;
 
+  // Carousel needs two purpose-sized caches (center box, side trapezoids) instead of the one
+  // height-keyed cache every other theme's single Continue Reading card uses -- see
+  // LyraCarouselTheme::kCenterThumbW/kSideCoverW's comment for why sharing one cache produced
+  // near-blank covers for off-aspect-ratio art.
+  const bool isCarouselTheme =
+      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
+
   int progress = 0;
   for (RecentBook& book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
@@ -88,12 +97,33 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       if (!freshTemplate.empty() && freshTemplate != book.coverBmpPath) {
         book.coverBmpPath = freshTemplate;
         RECENT_BOOKS.updateBook(book.path, book.title, book.author, freshTemplate);
+        // Also invalidate coverBufferStored, not just coverRendered: HomeActivity::render()
+        // restores the stored buffer (if any) BEFORE calling into the theme on every render, off
+        // whatever coverBufferStored was left at here. Leaving it true would let that restore
+        // keep re-serving the pre-fix (stale) buffer, silently suppressing the redraw this
+        // coverRendered reset was meant to force -- same class of bug as the centerIdx gate race.
         coverRendered = false;
+        coverBufferStored = false;
         requestUpdate();
       }
 
-      std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      bool needsCenter = false;
+      bool needsSide = false;
+      bool needsLegacy = false;
+      if (isCarouselTheme) {
+        const std::string centerPath =
+            UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselTheme::kCenterThumbW,
+                                       LyraCarouselTheme::kCenterThumbH);
+        const std::string sidePath = UITheme::getCoverThumbPath(book.coverBmpPath, LyraCarouselTheme::kSideCoverW,
+                                                                 LyraCarouselTheme::kSideCoverH);
+        needsCenter = !Storage.exists(centerPath.c_str());
+        needsSide = !Storage.exists(sidePath.c_str());
+      } else {
+        const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+        needsLegacy = !Storage.exists(coverPath.c_str());
+      }
+
+      if (needsCenter || needsSide || needsLegacy) {
         // If epub, try to load the metadata for title/author and cover
         if (FsHelpers::hasEpubExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
@@ -111,12 +141,26 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-            bool success = epub.generateThumbBmp(coverHeight);
+            bool success = true;
+            if (isCarouselTheme) {
+              if (needsCenter)
+                success = epub.generateThumbBmp(LyraCarouselTheme::kCenterThumbW, LyraCarouselTheme::kCenterThumbH) &&
+                          success;
+              if (needsSide)
+                success =
+                    epub.generateThumbBmp(LyraCarouselTheme::kSideCoverW, LyraCarouselTheme::kSideCoverH) && success;
+            } else {
+              success = epub.generateThumbBmp(coverHeight);
+            }
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
             }
+            // coverBufferStored too, not just coverRendered -- see the self-heal block's comment
+            // above: leaving it true lets HomeActivity::render()'s next buffer-restore keep
+            // re-serving the pre-generation (placeholder) buffer and silently swallow this reset.
             coverRendered = false;
+            coverBufferStored = false;
             requestUpdate();
           }
         } else if (FsHelpers::hasXtcExtension(book.path)) {
@@ -129,12 +173,23 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-            bool success = xtc.generateThumbBmp(coverHeight);
+            bool success = true;
+            if (isCarouselTheme) {
+              if (needsCenter)
+                success = xtc.generateThumbBmp(LyraCarouselTheme::kCenterThumbW, LyraCarouselTheme::kCenterThumbH) &&
+                          success;
+              if (needsSide)
+                success =
+                    xtc.generateThumbBmp(LyraCarouselTheme::kSideCoverW, LyraCarouselTheme::kSideCoverH) && success;
+            } else {
+              success = xtc.generateThumbBmp(coverHeight);
+            }
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
             }
             coverRendered = false;
+            coverBufferStored = false;
             requestUpdate();
           }
         }
@@ -267,15 +322,63 @@ void HomeActivity::loop() {
     }
   };
 
-  buttonNavigator.onNext([this, menuCount] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
-    requestUpdate();
-  });
+  const bool isCarouselTheme =
+      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
 
-  buttonNavigator.onPrevious([this, menuCount] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
-    requestUpdate();
-  });
+  if (isCarouselTheme) {
+    // Two-level nav, this theme only: Left/Right move within whichever level selectorIndex is
+    // currently in (carousel books, or menu icons); Up/Down -- either one, since there are only
+    // two levels here, so both mean "switch level" -- cross between them, restoring each level's
+    // own last position (lastCarouselIndex/lastMenuIndex) instead of resetting to index 0.
+    // Bypasses NavNext/NavPrevious (which composite side Up/Down with front Left/Right into one
+    // axis -- see MappedInputManager::mapButton) so the two physical pairs can mean different
+    // things here. Back/Confirm are untouched, so Resume/Select on the front-left buttons behave
+    // exactly as before.
+    const int bookCount = static_cast<int>(recentBooks.size());
+    const int menuOnlyCount = menuCount - bookCount;
+
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this, bookCount, menuOnlyCount] {
+      if (selectorIndex < bookCount) {
+        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, bookCount);
+      } else {
+        selectorIndex = bookCount + ButtonNavigator::nextIndex(selectorIndex - bookCount, menuOnlyCount);
+      }
+      requestUpdate();
+    });
+
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this, bookCount, menuOnlyCount] {
+      if (selectorIndex < bookCount) {
+        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, bookCount);
+      } else {
+        selectorIndex = bookCount + ButtonNavigator::previousIndex(selectorIndex - bookCount, menuOnlyCount);
+      }
+      requestUpdate();
+    });
+
+    const auto switchLevel = [this, bookCount, menuOnlyCount] {
+      if (selectorIndex < bookCount) {
+        if (menuOnlyCount <= 0) return;
+        lastCarouselIndex = selectorIndex;
+        selectorIndex = bookCount + std::clamp(lastMenuIndex, 0, menuOnlyCount - 1);
+      } else {
+        if (bookCount <= 0) return;
+        lastMenuIndex = selectorIndex - bookCount;
+        selectorIndex = std::clamp(lastCarouselIndex, 0, bookCount - 1);
+      }
+      requestUpdate();
+    };
+    buttonNavigator.onPress({MappedInputManager::Button::Up, MappedInputManager::Button::Down}, switchLevel);
+  } else {
+    buttonNavigator.onNext([this, menuCount] {
+      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+      requestUpdate();
+    });
+
+    buttonNavigator.onPrevious([this, menuCount] {
+      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+      requestUpdate();
+    });
+  }
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {

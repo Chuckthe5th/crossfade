@@ -79,6 +79,18 @@ class LyraCarouselTheme : public LyraTheme {
   static constexpr int kNearSideW = (kBaseDisplayCenterW * 26) / 100;
   static constexpr int kNearSideInnerH = (kBaseDisplayCenterH * 90) / 100;
   static constexpr int kNearSideOuterH = (kBaseDisplayCenterH * 82) / 100;
+  // Purpose-sized cache thumbnails, ported from CrossInk's real HomeActivity/LyraCarouselTheme
+  // (not this fork's earlier one-size-shared-by-everything cache): the center cache is generated
+  // at exactly the rendered center box's own size (kDisplayCenterW/H minus the visual inset), and
+  // the side cache at a fixed size close to the side trapezoids' own footprint. Both are generated
+  // letterbox-contained (Epub/Xtc::generateThumbBmp(width, height), crop=false -- see its comment),
+  // so the cached bitmap's aspect ratio is always close to its target box's, and the cover-crop
+  // math in the .cpp only ever corrects a small residual (the source cover's own natural ratio),
+  // never the large mismatch a generic shared-height cache produced for off-ratio covers.
+  static constexpr int kCenterThumbW = kDisplayCenterW - kCenterCoverVisualInset * 2;
+  static constexpr int kCenterThumbH = kDisplayCenterH - kCenterCoverVisualInset * 2;
+  static constexpr int kSideCoverW = 200;
+  static constexpr int kSideCoverH = LyraCarouselMetrics::values.homeCoverHeight - 210;
 
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,

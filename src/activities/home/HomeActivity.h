@@ -13,6 +13,12 @@ struct Rect;
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  // Carousel theme only (see loop()'s isCarouselTheme branch): remembers each level's own
+  // position so switching levels with Up/Down restores where you left off instead of resetting
+  // to index 0 -- the carousel's last-centered book, and the menu row's last-focused icon.
+  // Indices are level-local (0-based within that level), not selectorIndex's flat numbering.
+  int lastCarouselIndex = 0;
+  int lastMenuIndex = 0;
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;

@@ -138,6 +138,14 @@ std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight
   return coverBmpPath;
 }
 
+std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int width, int height) {
+  size_t pos = coverBmpPath.find("[HEIGHT]", 0);
+  if (pos != std::string::npos) {
+    coverBmpPath.replace(pos, 8, std::to_string(width) + "x" + std::to_string(height));
+  }
+  return coverBmpPath;
+}
+
 UIIcon UITheme::getFileIcon(const std::string& filename) {
   if (filename.back() == '/') {
     return Folder;

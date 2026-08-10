@@ -29,9 +29,12 @@ constexpr int kDisplayCenterH = LyraCarouselTheme::kDisplayCenterH;
 constexpr int kNearSideW = LyraCarouselTheme::kNearSideW;
 constexpr int kNearSideInnerH = LyraCarouselTheme::kNearSideInnerH;
 constexpr int kNearSideOuterH = LyraCarouselTheme::kNearSideOuterH;
-// The height every cover lookup in this file must use -- see LyraCarouselMetrics's homeCoverHeight
-// comment for why this has to match what HomeActivity::loadRecentCovers() actually pre-generates.
-constexpr int kCoverLookupHeight = LyraCarouselMetrics::values.homeCoverHeight;
+// Purpose-sized cache dimensions -- see their declaration in the header. Center and side covers
+// each look up their own cache; HomeActivity::loadRecentCovers() generates both per book.
+constexpr int kCenterThumbW = LyraCarouselTheme::kCenterThumbW;
+constexpr int kCenterThumbH = LyraCarouselTheme::kCenterThumbH;
+constexpr int kSideCoverW = LyraCarouselTheme::kSideCoverW;
+constexpr int kSideCoverH = LyraCarouselTheme::kSideCoverH;
 
 constexpr int kCoverTopPad = 18;
 constexpr int kCenterCoverVisualInset = LyraCarouselTheme::kCenterCoverVisualInset;
@@ -188,10 +191,11 @@ void fillPerspectiveSilhouette(const GfxRenderer& renderer, const int x, const i
   }
 }
 
-// Loads book's cover thumbnail -- always at kCoverLookupHeight, the one height
-// HomeActivity::loadRecentCovers() pre-generates for this theme, regardless of targetRect's own
-// shape -- and draws it into targetRect, cropped on WHICHEVER axis (width or height) has surplus
-// so the image fills the box exactly without stretching. Ported from CrossInk's drawCenterCover
+// Loads the book's center-box cache thumbnail (kCenterThumbW x kCenterThumbH, generated
+// letterbox-contained by HomeActivity::loadRecentCovers()) and draws it into targetRect, cropped
+// on WHICHEVER axis (width or height) has surplus so the image fills the box exactly without
+// stretching -- a small correction, since generation already sized the source close to targetRect.
+// Ported from CrossInk's drawCenterCover
 // lambda: unlike this file's earlier cropX-only version, targetRect is not required to match the
 // source image's aspect ratio. CrossInk's own box (kDisplayCenterW x kDisplayCenterH, from the
 // header's two-tier sizing) isn't aspect-locked to a portrait book cover at all -- width and
@@ -201,7 +205,7 @@ void fillPerspectiveSilhouette(const GfxRenderer& renderer, const int x, const i
 // before); no renderer change was needed for this fix.
 bool drawCroppedCover(const GfxRenderer& renderer, const std::string& coverBmpPath, const Rect targetRect) {
   if (coverBmpPath.empty()) return false;
-  const std::string thumbPath = UITheme::getCoverThumbPath(coverBmpPath, kCoverLookupHeight);
+  const std::string thumbPath = UITheme::getCoverThumbPath(coverBmpPath, kCenterThumbW, kCenterThumbH);
   HalFile file;
   if (!Storage.openFileForRead("HOME", thumbPath, file)) return false;
   Bitmap bitmap(file);
@@ -238,7 +242,8 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
   const bool inCarouselRow = selectorIndex >= 0 && selectorIndex < bookCount;
   int centerIdx = inCarouselRow ? selectorIndex : (lastCenterIdx_ >= 0 ? lastCenterIdx_ : 0);
   if (centerIdx >= bookCount) centerIdx = bookCount - 1;
-  if (centerIdx != lastCenterIdx_) {
+  const bool centerChanged = centerIdx != lastCenterIdx_;
+  if (centerChanged) {
     coverRendered = false;
     coverBufferStored = false;
     // See cachedCenterProgressPercent_'s comment: computed here (only when the centered book
@@ -247,9 +252,15 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
   }
   lastCenterIdx_ = centerIdx;
 
-  // Same book already fully drawn and buffered (or the buffer was just restored from a snapshot
-  // of that same frame) -- nothing to redraw. Matches Lyra3CoversTheme's own coverRendered gate.
-  if (coverRendered || bufferRestored) return;
+  // Same book already fully drawn and buffered, and the buffer HomeActivity just restored is
+  // still for that same centerIdx -- nothing to redraw. If centerIdx just changed, bufferRestored
+  // reflects a snapshot HomeActivity restored for the OLD centerIdx (it runs restoreCoverBuffer()
+  // before calling in here, off last frame's coverBufferStored) -- trusting it here would suppress
+  // the entire redraw below (sides, center, title, dots, progress bar all skip together) and leave
+  // the stale frame on screen, perpetually one selection behind. The fillRect right below already
+  // clears the whole tile, so forcing a real redraw here safely overwrites whatever stale pixels
+  // that restore just wrote.
+  if (coverRendered || (bufferRestored && !centerChanged)) return;
 
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 
@@ -274,7 +285,7 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     const RecentBook& book = recentBooks[idx];
     const int sideHeight = std::max(leftHeight, rightHeight);
     if (!book.coverBmpPath.empty()) {
-      const std::string thumbPath = UITheme::getCoverThumbPath(book.coverBmpPath, kCoverLookupHeight);
+      const std::string thumbPath = UITheme::getCoverThumbPath(book.coverBmpPath, kSideCoverW, kSideCoverH);
       HalFile file;
       if (Storage.openFileForRead("HOME", thumbPath, file)) {
         Bitmap bitmap(file);
