@@ -54,6 +54,9 @@ class MappedInputManager {
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
   // Returns the raw front button index that was pressed this frame (or -1 if none).
   int getPressedFrontButton() const;
+  // Same, but also scans the 2 side buttons (HalGPIO::BTN_UP/BTN_DOWN) -- for the menu-nav remap
+  // wizard, which (unlike the reader remap wizard) lets those be reassigned too.
+  int getPressedNavButton() const;
 
   // True when the control axis is flipped relative to the physical buttons: the user opted into
   // orientation-following front buttons AND the screen is *currently rendered* rotated (INVERTED /

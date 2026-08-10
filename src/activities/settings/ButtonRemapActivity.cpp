@@ -9,8 +9,7 @@
 #include "fontIds.h"
 
 namespace {
-// UI steps correspond to logical roles in order: Back, Confirm, Left, Right.
-constexpr uint8_t kRoleCount = 4;
+// UI steps correspond to logical roles in order: Back, Confirm, Left, Right[, Up, Down].
 // Marker used when a role has not been assigned yet.
 constexpr uint8_t kUnassigned = 0xFF;
 // Duration to show temporary error text when reassigning a button.
@@ -22,10 +21,9 @@ void ButtonRemapActivity::onEnter() {
 
   // Start with all roles unassigned to avoid duplicate blocking.
   currentStep = 0;
-  tempMapping[0] = kUnassigned;
-  tempMapping[1] = kUnassigned;
-  tempMapping[2] = kUnassigned;
-  tempMapping[3] = kUnassigned;
+  for (uint8_t i = 0; i < roleCount(); i++) {
+    tempMapping[i] = kUnassigned;
+  }
   errorMessage.clear();
   errorUntil = 0;
   requestUpdate();
@@ -42,31 +40,34 @@ void ButtonRemapActivity::loop() {
     return;
   }
 
-  // Side buttons:
-  // - Up: reset mapping to defaults and exit.
-  // - Down: cancel without saving.
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-    // Persist default mapping immediately so the user can recover quickly.
-    if (forReader) {
+  if (forReader) {
+    // Side buttons, reader table only (Up/Down aren't reassignable roles here, so they're free
+    // to keep serving as a fixed escape hatch):
+    // - Up: reset mapping to defaults and exit.
+    // - Down: cancel without saving.
+    if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
       SETTINGS.readerFrontButtonBack = CrossPointSettings::FRONT_HW_BACK;
       SETTINGS.readerFrontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
       SETTINGS.readerFrontButtonLeft = CrossPointSettings::FRONT_HW_LEFT;
       SETTINGS.readerFrontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
-    } else {
-      SETTINGS.frontButtonBack = CrossPointSettings::FRONT_HW_BACK;
-      SETTINGS.frontButtonConfirm = CrossPointSettings::FRONT_HW_CONFIRM;
-      SETTINGS.frontButtonLeft = CrossPointSettings::FRONT_HW_LEFT;
-      SETTINGS.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
+      SETTINGS.saveToFile();
+      finish();
+      return;
     }
-    SETTINGS.saveToFile();
-    finish();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    // Exit without changing settings.
-    finish();
-    return;
+    if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+      finish();
+      return;
+    }
+  } else {
+    // Up/Down are themselves reassignable roles in this (menu-nav) mode, so they can't double as
+    // a fixed escape hatch anymore. Power always bypasses remapping (see
+    // MappedInputManager::mapButton), so it's the only button guaranteed available mid-wizard --
+    // cancel only, no quick-reset shortcut (a short press can't trigger sleep; that needs a held
+    // duration -- see main.cpp's power-button handling).
+    if (mappedInput.wasPressed(MappedInputManager::Button::Power)) {
+      finish();
+      return;
+    }
   }
 
   {
@@ -74,8 +75,9 @@ void ButtonRemapActivity::loop() {
     // This avoids rapid double-presses that can advance the step without a visible redraw.
     RenderLock lock(*this);
 
-    // Wait for a front button press to assign to the current role.
-    const int pressedButton = mappedInput.getPressedFrontButton();
+    // Wait for a button press to assign to the current role -- front-only for the reader table,
+    // front+side for the menu-nav one (which can assign Up/Down too).
+    const int pressedButton = forReader ? mappedInput.getPressedFrontButton() : mappedInput.getPressedNavButton();
     if (pressedButton < 0) {
       return;
     }
@@ -89,7 +91,7 @@ void ButtonRemapActivity::loop() {
     tempMapping[currentStep] = static_cast<uint8_t>(pressedButton);
     currentStep++;
 
-    if (currentStep >= kRoleCount) {
+    if (currentStep >= roleCount()) {
       // All roles assigned; save to settings and exit.
       applyTempMapping();
       SETTINGS.saveToFile();
@@ -103,7 +105,7 @@ void ButtonRemapActivity::loop() {
 
 void ButtonRemapActivity::render(RenderLock&&) {
   const auto labelForHardware = [&](uint8_t hardwareIndex) -> const char* {
-    for (uint8_t i = 0; i < kRoleCount; i++) {
+    for (uint8_t i = 0; i < roleCount(); i++) {
       if (tempMapping[i] == hardwareIndex) {
         return getRoleName(i);
       }
@@ -118,14 +120,15 @@ void ButtonRemapActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 I18N.get(forReader ? StrId::STR_REMAP_READER_FRONT_BUTTONS : StrId::STR_REMAP_FRONT_BUTTONS));
+                 I18N.get(forReader ? StrId::STR_REMAP_READER_FRONT_BUTTONS : StrId::STR_REMAP_MENU_NAV));
   GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
-                    tr(STR_REMAP_PROMPT));
+                    tr(forReader ? STR_REMAP_PROMPT : STR_REMAP_PROMPT_NAV));
 
   int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
   int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const uint8_t roles = roleCount();
   GUI.drawList(
-      renderer, Rect{0, topOffset, pageWidth, contentHeight}, kRoleCount, currentStep,
+      renderer, Rect{0, topOffset, pageWidth, contentHeight}, roles, currentStep,
       [&](int index) { return getRoleName(static_cast<uint8_t>(index)); }, nullptr, nullptr,
       [&](int index) {
         uint8_t assignedButton = tempMapping[static_cast<uint8_t>(index)];
@@ -140,16 +143,27 @@ void ButtonRemapActivity::render(RenderLock&&) {
                      errorMessage.c_str());
   }
 
-  // Provide side button actions at the bottom of the screen (split across two lines).
-  GUI.drawHelpText(renderer,
-                   Rect{0, topOffset + 4 * metrics.listRowHeight + 4 * metrics.verticalSpacing, pageWidth, 20},
-                   tr(STR_REMAP_RESET_HINT));
-  GUI.drawHelpText(renderer,
-                   Rect{0, topOffset + 4 * metrics.listRowHeight + 5 * metrics.verticalSpacing + 20, pageWidth, 20},
-                   tr(STR_REMAP_CANCEL_HINT));
+  // Escape-hatch hint(s) below the role list -- offset by the actual role count so it doesn't
+  // overlap the last row(s), which differs between the 4-role reader table and the 6-role
+  // menu-nav one.
+  if (forReader) {
+    GUI.drawHelpText(renderer,
+                     Rect{0, topOffset + roles * metrics.listRowHeight + 4 * metrics.verticalSpacing, pageWidth, 20},
+                     tr(STR_REMAP_RESET_HINT));
+    GUI.drawHelpText(
+        renderer,
+        Rect{0, topOffset + roles * metrics.listRowHeight + 5 * metrics.verticalSpacing + 20, pageWidth, 20},
+        tr(STR_REMAP_CANCEL_HINT));
+  } else {
+    GUI.drawHelpText(renderer,
+                     Rect{0, topOffset + roles * metrics.listRowHeight + 4 * metrics.verticalSpacing, pageWidth, 20},
+                     tr(STR_REMAP_CANCEL_HINT_POWER));
+  }
 
   // Live preview of logical labels under front buttons.
-  // This mirrors the on-device front button order: Back, Confirm, Left, Right.
+  // This mirrors the on-device front button order: Back, Confirm, Left, Right. Up/Down have no
+  // dedicated hint slot (no on-screen hint exists for side buttons anywhere in the app) -- their
+  // live-assigned role is visible in the list above instead.
   GUI.drawButtonHints(renderer, labelForHardware(CrossPointSettings::FRONT_HW_BACK),
                       labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM),
                       labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
@@ -169,12 +183,14 @@ void ButtonRemapActivity::applyTempMapping() {
     SETTINGS.frontButtonConfirm = tempMapping[1];
     SETTINGS.frontButtonLeft = tempMapping[2];
     SETTINGS.frontButtonRight = tempMapping[3];
+    SETTINGS.frontButtonUp = tempMapping[4];
+    SETTINGS.frontButtonDown = tempMapping[5];
   }
 }
 
 bool ButtonRemapActivity::validateUnassigned(const uint8_t pressedButton) {
   // Block reusing a hardware button already assigned to another role.
-  for (uint8_t i = 0; i < kRoleCount; i++) {
+  for (uint8_t i = 0; i < roleCount(); i++) {
     if (tempMapping[i] == pressedButton && i != currentStep) {
       errorMessage = tr(STR_ALREADY_ASSIGNED);
       errorUntil = millis() + kErrorDisplayMs;
@@ -193,8 +209,12 @@ const char* ButtonRemapActivity::getRoleName(const uint8_t roleIndex) const {
     case 2:
       return tr(STR_DIR_LEFT);
     case 3:
-    default:
       return tr(STR_DIR_RIGHT);
+    case 4:
+      return tr(STR_DIR_UP);
+    case 5:
+    default:
+      return tr(STR_DIR_DOWN);
   }
 }
 
@@ -208,6 +228,10 @@ const char* ButtonRemapActivity::getHardwareName(const uint8_t buttonIndex) cons
       return tr(STR_HW_LEFT_LABEL);
     case CrossPointSettings::FRONT_HW_RIGHT:
       return tr(STR_HW_RIGHT_LABEL);
+    case CrossPointSettings::FRONT_HW_UP:
+      return tr(STR_HW_UP_LABEL);
+    case CrossPointSettings::FRONT_HW_DOWN:
+      return tr(STR_HW_DOWN_LABEL);
     default:
       return "Unknown";
   }
