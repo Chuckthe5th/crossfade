@@ -20,10 +20,11 @@ CrossFade keeps CrossPoint's on-disk format and MIT license, and merges the late
 
 | Device | Status |
 |--------|--------|
-| **Xteink X3** | ✅ Built and tested. This is the primary target. |
-| **Xteink X4** | ⚠️ **Builds but currently UNTESTED on hardware.** X4 testing coming shortly. Flash on X4 at your own risk until this note is updated. |
+| **Xteink X3** | ✅ Built and tested. |
+| **Xteink X4** | ✅ Built and tested. |
+| **Xteink X4 Pro / other devices** | ❌ Not supported yet — may change in the future. |
 
-The X3 and X4 share one binary with runtime device detection, so the same release works on both — but only the X3 has been verified on real hardware so far.
+The X3 and X4 share one binary with runtime device detection, so the same release works on both, and both have been verified on real hardware. X4 Pro and other devices aren't supported at this time.
 
 ---
 
