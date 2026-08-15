@@ -91,7 +91,11 @@ void CoverGridBrowserActivity::loadBooks() {
     }
     return;
   }
-  topLevelEntries = LibraryGrouping::loadLibraryEntries(SETTINGS.groupBySeries);
+  // preferIndexWhenFlat=true: Covers now always routes through a delta rebuild first (see
+  // HomeActivity::onFileBrowserOpen()), so the on-disk index is guaranteed current by the time
+  // this runs -- reading it here avoids paying LibraryScanner's directory walk a second time for
+  // the same entry into Covers.
+  topLevelEntries = LibraryGrouping::loadLibraryEntries(SETTINGS.groupBySeries, /*preferIndexWhenFlat=*/true);
 }
 
 void CoverGridBrowserActivity::ensurePageLoaded() {

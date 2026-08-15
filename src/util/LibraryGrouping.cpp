@@ -27,6 +27,24 @@ bool seriesIndexLess(const float a, const float b) {
   return a < b;
 }
 
+// Maps a persisted index straight into the flat (ungrouped) Entry shape, no series collapsing --
+// title/author come along for free since the index already resolved them. Used by
+// loadLibraryEntries()'s preferIndexWhenFlat path to avoid a second LibraryScanner walk when the
+// caller already knows the index is current.
+std::vector<LibraryGrouping::Entry> flatten(const std::vector<LibraryIndex::Entry>& indexEntries) {
+  std::vector<LibraryGrouping::Entry> result;
+  result.reserve(indexEntries.size());
+  for (const auto& ie : indexEntries) {
+    LibraryGrouping::Entry e;
+    e.path = ie.path;
+    e.title = ie.title;
+    e.author = ie.author;
+    result.push_back(std::move(e));
+  }
+  LibraryScanner::sortByFilename(result);
+  return result;
+}
+
 }  // namespace
 
 namespace LibraryGrouping {
@@ -132,14 +150,14 @@ std::vector<Entry> collapse(const std::vector<LibraryIndex::Entry>& indexEntries
   return result;
 }
 
-std::vector<Entry> loadLibraryEntries(const bool groupBySeries) {
-  if (groupBySeries) {
+std::vector<Entry> loadLibraryEntries(const bool groupBySeries, const bool preferIndexWhenFlat) {
+  if (groupBySeries || preferIndexWhenFlat) {
     LibraryIndex::Index index;
     if (LibraryIndex::load(LibraryIndex::PATH, index)) {
-      return collapse(index.entries);
+      return groupBySeries ? collapse(index.entries) : flatten(index.entries);
     }
     // No valid index yet (never built, or a build was cancelled before committing) -- fall back
-    // to the ungrouped path below rather than showing an empty screen.
+    // to the ungrouped scan below rather than showing an empty screen.
   }
 
   const auto scanned = LibraryScanner::scanAllBooks("/", LibraryScanner::MAX_LIBRARY_BOOKS);

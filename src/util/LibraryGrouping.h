@@ -13,7 +13,12 @@
 // Ungrouped (SETTINGS.groupBySeries off, or no valid index yet): loadLibraryEntries() returns one
 // standalone Entry per book in filename order, title/author left empty for lazy per-page
 // resolution via resolvePage() -- functionally identical to this codebase's pre-grouping
-// behavior.
+// behavior. Exception: a caller that passes preferIndexWhenFlat=true and already has a valid
+// on-disk index gets that index's entries (title/author pre-filled, see flatten()) instead of a
+// fresh directory walk -- for a caller that just ran a delta rebuild (e.g. CoverGridBrowserActivity,
+// which now always does so before loading Covers -- see HomeActivity::onFileBrowserOpen()), the
+// index is already guaranteed current, so re-walking the SD card a second time in the same entry
+// would be pure waste.
 //
 // Grouped: loadLibraryEntries() reads the persisted LibraryIndex and collapses it via collapse()
 // into a single list where every entry (standalone or series) already has its title/author known
@@ -61,7 +66,14 @@ std::vector<Entry> collapse(const std::vector<LibraryIndex::Entry>& indexEntries
 // CoverGridBrowserActivity). Reads+collapses the persisted index when groupBySeries is true AND a
 // valid index exists; otherwise scans via LibraryScanner and returns one unresolved standalone
 // Entry per book, filename-ordered -- identical to this codebase's pre-grouping behavior.
-std::vector<Entry> loadLibraryEntries(bool groupBySeries);
+//
+// preferIndexWhenFlat: when groupBySeries is false, try the persisted index first anyway (see
+// flatten()) and only fall back to a live scan if none exists -- for a caller that just rebuilt
+// the index itself and knows it's current. Ignored when groupBySeries is true (already reads the
+// index in that case). Defaults to false so existing ungrouped callers keep their always-live-scan
+// guarantee (LibraryListActivity's Titles view, which never rebuilds on its own and must reflect
+// the SD card exactly, not a possibly-stale index from some earlier Covers visit).
+std::vector<Entry> loadLibraryEntries(bool groupBySeries, bool preferIndexWhenFlat = false);
 
 // Resolves entries[pageStart, pageEnd) in place: title/author for any entry that doesn't have
 // them yet (a no-op for an already-resolved entry, whether that's because it came from the index

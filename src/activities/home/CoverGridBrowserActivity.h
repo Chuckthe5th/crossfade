@@ -81,10 +81,12 @@ class CoverGridBrowserActivity final : public Activity {
   int currentCount() const { return static_cast<int>(currentEntries().size()); }
 
   void computeGridGeometry();
-  // Source::Library scans (or, when SETTINGS.groupBySeries is on and a valid index exists,
-  // reads+collapses) the whole SD card; Source::RecentBooks copies RECENT_BOOKS.getBooks() as-is
-  // (already MRU-ordered, already capped, title/author already known, never grouped) -- the only
-  // method that branches on `source`.
+  // Source::Library reads+collapses (or, when ungrouped, reads+flattens -- see
+  // LibraryGrouping::loadLibraryEntries's preferIndexWhenFlat) the on-disk library index, which is
+  // always current by this point since onFileBrowserOpen() routes Covers through a delta rebuild
+  // first; Source::RecentBooks copies RECENT_BOOKS.getBooks() as-is (already MRU-ordered, already
+  // capped, title/author already known, never grouped) -- the only method that branches on
+  // `source`.
   void loadBooks();
   // Resolves the current page's metadata/covers synchronously (called at the top of render(),
   // before anything is drawn) via the shared LibraryGrouping::resolvePage. A no-op for any entry

@@ -534,17 +534,16 @@ void HomeActivity::onSelectBook(const std::string& path) {
 }
 
 void HomeActivity::onFileBrowserOpen() {
-  // Grouping needs every book's series known before the first page can render correctly, so
-  // Covers/Titles route through an index check first when SETTINGS.groupBySeries is on --
-  // near-instant if nothing changed since the last build, a cancellable rebuild otherwise (see
-  // LibraryIndexRebuildActivity). The stock file browser never groups and is unaffected.
+  // Grouping needs every book's series known before the first page can render correctly, and the
+  // same rebuild also pre-renders any missing cover thumbnails (see LibraryIndexRebuildActivity /
+  // LibraryIndexBuilder's coverBackfill) -- so Covers always routes through an index check first,
+  // even with SETTINGS.groupBySeries off, or covers for never-opened books would only ever appear
+  // lazily as their page happens to be scrolled to. Near-instant if nothing changed since the last
+  // build, a cancellable rebuild otherwise. Titles only needs the index for grouping, so it stays
+  // gated behind groupBySeries. The stock file browser never groups and is unaffected.
   switch (SETTINGS.fileBrowserView) {
     case CrossPointSettings::FILE_BROWSER_COVERS:
-      if (SETTINGS.groupBySeries) {
-        activityManager.goToLibraryIndexRebuild([] { activityManager.goToCoverGridBrowser(); });
-      } else {
-        activityManager.goToCoverGridBrowser();
-      }
+      activityManager.goToLibraryIndexRebuild([] { activityManager.goToCoverGridBrowser(); });
       break;
     case CrossPointSettings::FILE_BROWSER_TITLES:
       if (SETTINGS.groupBySeries) {
