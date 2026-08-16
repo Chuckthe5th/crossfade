@@ -331,6 +331,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_PIN_BOOK_TO_HOME, &CrossPointSettings::pinBookToHome, "pinBookToHome",
                             StrId::STR_CAT_SYSTEM),
+        SettingInfo::Toggle(StrId::STR_TRACK_READING_STATS, &CrossPointSettings::trackReadingStats,
+                            "trackReadingStats", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_HIDE_BUTTON_HINTS, &CrossPointSettings::hideButtonHints, "hideButtonHints",
                             StrId::STR_CAT_CONTROLS),
         SettingInfo::String(StrId::STR_DEVICE_NAME, &SETTINGS.deviceName[0], sizeof(SETTINGS.deviceName),

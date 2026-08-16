@@ -5,9 +5,11 @@
 
 #include <optional>
 
+#include "BookReadingStats.h"
 #include "BookmarkEntry.h"
 #include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
+#include "GlobalReadingStats.h"
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
 
@@ -28,6 +30,28 @@ class EpubReaderActivity final : public Activity {
   int cachedChapterTotalPageCount = 0;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
+  // Reading-stats timing: entirely no-op when !SETTINGS.shouldTrackReadingStats() -- see
+  // recordPageDwellTime()'s guard. pageShownAtMs is still set unconditionally (a bare millis()
+  // call costs nothing), but nothing reads it, mutates stats/globalStats, or touches SD when the
+  // setting is off.
+  unsigned long pageShownAtMs = 0UL;
+  uint32_t sessionReadingSeconds = 0;
+  uint32_t sessionPaceSampleSeconds = 0;
+  uint16_t sessionPaceSampleCount = 0;
+  BookReadingStats stats;
+  GlobalReadingStats globalStats;
+  // Folds the current page's dwell time (since pageShownAtMs) into sessionReadingSeconds, and --
+  // for a forward turn -- into stats' running pace average. Discards dwell longer than
+  // READING_STATS_IDLE_THRESHOLD_SECONDS (the reader was left open, not actively read) or shorter
+  // than READING_STATS_MIN_DWELL_SECONDS (an accidental/instant double-turn). Always resets
+  // pageShownAtMs to now for the page that's about to show. No-op when reading-stats tracking is
+  // off.
+  void recordPageDwellTime(bool isForwardTurn);
+  // Recomputes stats.estimatedTimeLeftSeconds from the current pace average and remaining pages
+  // (current chapter's real pagination + the rest of the book estimated at this chapter's own
+  // bytes-per-page density). Zeroes it out when there's no pace data yet, or the book is already
+  // finished (FINISHED_BOOKS is the source of truth for that -- this doesn't duplicate it).
+  void refreshEstimatedTimeLeft();
   // Signals that the next render should reposition within the newly loaded section
   // based on a cross-book percentage jump.
   bool pendingPercentJump = false;
