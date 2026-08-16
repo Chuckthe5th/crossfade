@@ -30,13 +30,14 @@ class EpubReaderMenuActivity final : public Activity {
     SYNC,
     DELETE_CACHE,
     DICTIONARY,
-    TOGGLE_FINISHED
+    TOGGLE_FINISHED,
+    READING_STATS
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
-                                  bool isFinished);
+                                  bool isFinished, bool statsEnabled);
 
   void onEnter() override;
   void onExit() override;
@@ -61,7 +62,7 @@ class EpubReaderMenuActivity final : public Activity {
   static constexpr size_t MENU_TAB_COUNT = 3;
   using TabMenuItems = std::array<std::vector<MenuItem>, MENU_TAB_COUNT>;
 
-  static TabMenuItems buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool isFinished);
+  static TabMenuItems buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool isFinished, bool statsEnabled);
   [[nodiscard]] const std::vector<MenuItem>& activeMenuItems() const;
   [[nodiscard]] size_t activeTabIndex() const { return static_cast<size_t>(activeTab); }
   void cycleActiveTab();

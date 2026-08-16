@@ -17,6 +17,7 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
+#include "BookStatsActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -285,7 +286,8 @@ void EpubReaderActivity::openReaderMenu() {
   startActivityForResult(
       std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
                                                bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
-                                               !cachedBookmarks.empty(), FINISHED_BOOKS.isFinished(epub->getPath())),
+                                               !cachedBookmarks.empty(), FINISHED_BOOKS.isFinished(epub->getPath()),
+                                               SETTINGS.shouldTrackReadingStats()),
       [this](const ActivityResult& result) {
         // Always apply orientation change even if the menu was cancelled
         const auto& menu = std::get<MenuResult>(result.data);
@@ -934,6 +936,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const std::string path = epub->getPath();
       FINISHED_BOOKS.setFinished(path, !FINISHED_BOOKS.isFinished(path));
       requestUpdate();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::READING_STATS: {
+      // Refresh the time-left estimate off the current session's pace before showing it --
+      // otherwise it's whatever was cached at the last onExit(), which could be a whole session
+      // stale.
+      refreshEstimatedTimeLeft();
+      startActivityForResult(std::make_unique<BookStatsActivity>(renderer, mappedInput, stats),
+                             [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
   }

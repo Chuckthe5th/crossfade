@@ -43,9 +43,10 @@ void drawTabIcon(const GfxRenderer& renderer, const uint8_t bitmap[], const int 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes, const bool hasBookmarks, const bool isFinished)
+                                               const bool hasFootnotes, const bool hasBookmarks, const bool isFinished,
+                                               const bool statsEnabled)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, isFinished)),
+      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, isFinished, statsEnabled)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
@@ -53,7 +54,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       bookProgressPercent(bookProgressPercent) {}
 
 EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes, bool hasBookmarks,
-                                                                            bool isFinished) {
+                                                                            bool isFinished, bool statsEnabled) {
   TabMenuItems items;
   auto& mainItems = items[MAIN_TAB_INDEX];
   auto& bookmarkItems = items[BOOKMARKS_TAB_INDEX];
@@ -75,6 +76,11 @@ EpubReaderMenuActivity::TabMenuItems EpubReaderMenuActivity::buildMenuItems(bool
   mainItems.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   mainItems.push_back(
       {MenuAction::TOGGLE_FINISHED, isFinished ? StrId::STR_MARK_UNFINISHED : StrId::STR_MARK_FINISHED});
+  // Hidden entirely when SETTINGS.shouldTrackReadingStats() is off -- nothing meaningful to show,
+  // and showing the entry would just invite tapping into an always-empty screen.
+  if (statsEnabled) {
+    mainItems.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
+  }
 
   if (hasBookmarks) {
     bookmarkItems.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
