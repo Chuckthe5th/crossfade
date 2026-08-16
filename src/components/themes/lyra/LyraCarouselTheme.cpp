@@ -1,6 +1,8 @@
 #include "LyraCarouselTheme.h"
 
 #include <Bitmap.h>
+#include <Epub.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -10,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "RecentBooksStore.h"
 #include "activities/reader/EpubReaderUtils.h"
 #include "components/UITheme.h"
@@ -60,6 +63,37 @@ constexpr int kMenuRowDrop = 31;
 constexpr int kFooterTopGap = 10;
 constexpr int kFooterProgressBarHeight = 5;
 constexpr int kFooterPercentTopGap = 2;
+constexpr int kStatsLabelBottomGap = 4;
+
+// Compact "3h 20m" / "45m" / "<1m" duration label -- no translated words, matching the equally
+// compact "%.0f%%" progress label just below it (see the progress-bar block), not full prose.
+void formatCompactDuration(const uint32_t seconds, char* buf, const size_t len) {
+  if (seconds < 60) {
+    snprintf(buf, len, "<1m");
+    return;
+  }
+  const uint32_t hours = seconds / 3600;
+  const uint32_t minutes = (seconds % 3600) / 60;
+  if (hours == 0) {
+    snprintf(buf, len, "%lum", static_cast<unsigned long>(minutes));
+  } else {
+    snprintf(buf, len, "%luh %lum", static_cast<unsigned long>(hours), static_cast<unsigned long>(minutes));
+  }
+}
+
+// Cache path is derived from the path alone (Epub's constructor does no I/O), so this costs one
+// small stats.bin read -- no Epub::load(). EPUB only for now: this fork's reading-stats hook only
+// instruments EpubReaderActivity, so an XTC recent book would only ever load a default-constructed
+// (empty) BookReadingStats, indistinguishable from truly no stats -- hasEpubExtension short-circuits
+// that pointless read.
+bool loadCenterBookStats(const std::string& path, BookReadingStats& outStats) {
+  if (!SETTINGS.shouldTrackReadingStats() || !FsHelpers::hasEpubExtension(path)) {
+    return false;
+  }
+  const Epub epub(path, "/.crosspoint");
+  outStats = BookReadingStats::load(epub.getCachePath());
+  return outStats.sessionCount > 0;
+}
 
 constexpr int kCornerRadius = 6;
 constexpr int kThinOutlineW = 1;    // always-visible outline around the center cover
@@ -249,6 +283,7 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     // See cachedCenterProgressPercent_'s comment: computed here (only when the centered book
     // actually changes), not from the progressPercent parameter.
     cachedCenterProgressPercent_ = EpubReaderUtils::recentBookProgressPercent(recentBooks[centerIdx].path);
+    hasCachedCenterStats_ = loadCenterBookStats(recentBooks[centerIdx].path, cachedCenterStats_);
   }
   lastCenterIdx_ = centerIdx;
 
@@ -371,13 +406,32 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     dotX += kDotSize + kDotGap;
   }
 
+  // --- Reading-stats time label (time read, and time left once a pace estimate exists), above
+  // the progress bar -- sourced from cachedCenterStats_ (centerIdx-keyed, same reasoning as
+  // cachedCenterProgressPercent_ -- see its comment). Omitted entirely when reading-stats tracking
+  // is off (SETTINGS.shouldTrackReadingStats()) or no qualifying session has been recorded yet for
+  // this book, rather than drawing a misleading "0m read".
+  int footerTopY = dotsY + kDotSize + kFooterTopGap;
+  if (hasCachedCenterStats_) {
+    char timeReadBuf[16];
+    formatCompactDuration(cachedCenterStats_.totalReadingSeconds, timeReadBuf, sizeof(timeReadBuf));
+    std::string timeLabel = std::string(timeReadBuf) + " read";
+    if (cachedCenterStats_.estimatedTimeLeftSeconds > 0) {
+      char timeLeftBuf[16];
+      formatCompactDuration(cachedCenterStats_.estimatedTimeLeftSeconds, timeLeftBuf, sizeof(timeLeftBuf));
+      timeLabel += " - " + std::string(timeLeftBuf) + " left";
+    }
+    const int timeLabelW = renderer.getTextWidth(UI_10_FONT_ID, timeLabel.c_str(), EpdFontFamily::REGULAR);
+    renderer.drawText(UI_10_FONT_ID, centerRect.x + (centerRect.width - timeLabelW) / 2, footerTopY,
+                      timeLabel.c_str(), true, EpdFontFamily::REGULAR);
+    footerTopY += renderer.getLineHeight(UI_10_FONT_ID) + kStatsLabelBottomGap;
+  }
+
   // --- Progress bar + percentage label: CrossFade's own real per-book percentage, computed for
   // centerIdx (see cachedCenterProgressPercent_'s comment -- not the passed-in progressPercent
-  // parameter). CrossInk's "total time read" stats label above the bar isn't ported -- this fork
-  // has no reading-stats subsystem to source it from -- but the percentage label CrossInk draws
-  // after the bar is restored (an earlier version of this port dropped it). ---
+  // parameter). Shifts down below the time label above when present. ---
   if (cachedCenterProgressPercent_ >= 0.0f) {
-    const int footerY = dotsY + kDotSize + kFooterTopGap;
+    const int footerY = footerTopY;
     const int footerWidth = std::min(screenW - 2 * LyraCarouselMetrics::values.contentSidePadding, centerRect.width);
     const int footerX = centerRect.x + (centerRect.width - footerWidth) / 2;
     const float clamped = std::clamp(cachedCenterProgressPercent_, 0.0f, 100.0f);

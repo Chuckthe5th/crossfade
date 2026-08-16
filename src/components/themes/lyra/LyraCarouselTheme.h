@@ -1,5 +1,6 @@
 #pragma once
 
+#include "activities/reader/BookReadingStats.h"
 #include "components/themes/lyra/LyraTheme.h"
 
 class GfxRenderer;
@@ -121,4 +122,12 @@ class LyraCarouselTheme : public LyraTheme {
   // than recomputed every render for the same reason Lyra3CoversTheme caches its own -- it's a
   // real Epub::load() otherwise repeated for no reason on every render.
   mutable float cachedCenterProgressPercent_ = -1.0f;
+  // The centered book's reading-stats snapshot (time read / time left), refreshed in the same
+  // centerIdx-changed branch as cachedCenterProgressPercent_ and for the same reason -- keyed on
+  // the carousel's own centerIdx, not the selectorIndex-driven parameter HomeActivity passes,
+  // which goes stale the instant the icon-menu row gets focus. hasCachedCenterStats_ is false
+  // whenever SETTINGS.shouldTrackReadingStats() is off or no stats exist yet for this book, so the
+  // footer simply omits the time labels rather than showing zeros.
+  mutable BookReadingStats cachedCenterStats_;
+  mutable bool hasCachedCenterStats_ = false;
 };
