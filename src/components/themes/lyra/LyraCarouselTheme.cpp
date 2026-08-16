@@ -283,9 +283,16 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     // See cachedCenterProgressPercent_'s comment: computed here (only when the centered book
     // actually changes), not from the progressPercent parameter.
     cachedCenterProgressPercent_ = EpubReaderUtils::recentBookProgressPercent(recentBooks[centerIdx].path);
-    hasCachedCenterStats_ = loadCenterBookStats(recentBooks[centerIdx].path, cachedCenterStats_);
   }
   lastCenterIdx_ = centerIdx;
+  // Unlike cachedCenterProgressPercent_, reloaded every render rather than only on a centerIdx
+  // change: BookReadingStats::load() is a small (~19-byte) file read, not an Epub::load() parse,
+  // so caching it isn't worth the staleness risk. That risk is real, not theoretical -- this
+  // instance lives for the whole app session (UITheme::currentTheme), so gating it behind
+  // centerChanged meant the label could stay stuck on a stats.bin snapshot from before the last
+  // reading session (or from before SETTINGS.shouldTrackReadingStats() was even turned on) for as
+  // long as the same book stayed centered, which is the common case.
+  hasCachedCenterStats_ = loadCenterBookStats(recentBooks[centerIdx].path, cachedCenterStats_);
 
   // Same book already fully drawn and buffered, and the buffer HomeActivity just restored is
   // still for that same centerIdx -- nothing to redraw. If centerIdx just changed, bufferRestored
@@ -406,32 +413,12 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     dotX += kDotSize + kDotGap;
   }
 
-  // --- Reading-stats time label (time read, and time left once a pace estimate exists), above
-  // the progress bar -- sourced from cachedCenterStats_ (centerIdx-keyed, same reasoning as
-  // cachedCenterProgressPercent_ -- see its comment). Omitted entirely when reading-stats tracking
-  // is off (SETTINGS.shouldTrackReadingStats()) or no qualifying session has been recorded yet for
-  // this book, rather than drawing a misleading "0m read".
-  int footerTopY = dotsY + kDotSize + kFooterTopGap;
-  if (hasCachedCenterStats_) {
-    char timeReadBuf[16];
-    formatCompactDuration(cachedCenterStats_.totalReadingSeconds, timeReadBuf, sizeof(timeReadBuf));
-    std::string timeLabel = std::string(timeReadBuf) + " read";
-    if (cachedCenterStats_.estimatedTimeLeftSeconds > 0) {
-      char timeLeftBuf[16];
-      formatCompactDuration(cachedCenterStats_.estimatedTimeLeftSeconds, timeLeftBuf, sizeof(timeLeftBuf));
-      timeLabel += " - " + std::string(timeLeftBuf) + " left";
-    }
-    const int timeLabelW = renderer.getTextWidth(UI_10_FONT_ID, timeLabel.c_str(), EpdFontFamily::REGULAR);
-    renderer.drawText(UI_10_FONT_ID, centerRect.x + (centerRect.width - timeLabelW) / 2, footerTopY,
-                      timeLabel.c_str(), true, EpdFontFamily::REGULAR);
-    footerTopY += renderer.getLineHeight(UI_10_FONT_ID) + kStatsLabelBottomGap;
-  }
-
   // --- Progress bar + percentage label: CrossFade's own real per-book percentage, computed for
   // centerIdx (see cachedCenterProgressPercent_'s comment -- not the passed-in progressPercent
-  // parameter). Shifts down below the time label above when present. ---
+  // parameter). ---
+  int footerBottomY = dotsY + kDotSize + kFooterTopGap;
   if (cachedCenterProgressPercent_ >= 0.0f) {
-    const int footerY = footerTopY;
+    const int footerY = footerBottomY;
     const int footerWidth = std::min(screenW - 2 * LyraCarouselMetrics::values.contentSidePadding, centerRect.width);
     const int footerX = centerRect.x + (centerRect.width - footerWidth) / 2;
     const float clamped = std::clamp(cachedCenterProgressPercent_, 0.0f, 100.0f);
@@ -443,8 +430,30 @@ void LyraCarouselTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, co
     char label[16];
     snprintf(label, sizeof(label), "%.0f%%", clamped);
     const int labelW = renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::REGULAR);
-    renderer.drawText(UI_10_FONT_ID, footerX + footerWidth - labelW,
-                      footerY + kFooterProgressBarHeight + kFooterPercentTopGap, label, true, EpdFontFamily::REGULAR);
+    const int percentLabelY = footerY + kFooterProgressBarHeight + kFooterPercentTopGap;
+    renderer.drawText(UI_10_FONT_ID, footerX + footerWidth - labelW, percentLabelY, label, true,
+                      EpdFontFamily::REGULAR);
+    footerBottomY = percentLabelY + renderer.getLineHeight(UI_10_FONT_ID) + kStatsLabelBottomGap;
+  }
+
+  // --- Reading-stats time label (time read, and time left once a pace estimate exists), below
+  // the progress bar and its percentage label -- sourced from cachedCenterStats_ (centerIdx-keyed,
+  // same reasoning as cachedCenterProgressPercent_ -- see its comment, and reloaded fresh every
+  // render -- see hasCachedCenterStats_'s assignment above). Omitted entirely when reading-stats
+  // tracking is off (SETTINGS.shouldTrackReadingStats()) or no qualifying session has been
+  // recorded yet for this book, rather than drawing a misleading "0m read".
+  if (hasCachedCenterStats_) {
+    char timeReadBuf[16];
+    formatCompactDuration(cachedCenterStats_.totalReadingSeconds, timeReadBuf, sizeof(timeReadBuf));
+    std::string timeLabel = std::string(timeReadBuf) + " read";
+    if (cachedCenterStats_.estimatedTimeLeftSeconds > 0) {
+      char timeLeftBuf[16];
+      formatCompactDuration(cachedCenterStats_.estimatedTimeLeftSeconds, timeLeftBuf, sizeof(timeLeftBuf));
+      timeLabel += " - " + std::string(timeLeftBuf) + " left";
+    }
+    const int timeLabelW = renderer.getTextWidth(UI_10_FONT_ID, timeLabel.c_str(), EpdFontFamily::REGULAR);
+    renderer.drawText(UI_10_FONT_ID, centerRect.x + (centerRect.width - timeLabelW) / 2, footerBottomY,
+                      timeLabel.c_str(), true, EpdFontFamily::REGULAR);
   }
 
   // --- Outline around the center cover, thicker when the carousel row itself is focused ---
