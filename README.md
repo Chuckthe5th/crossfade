@@ -90,6 +90,10 @@ Optional — **Settings → System → Hide Button Hints**. Removes the on-scree
 
 **Settings → System → Device Name** lets you set a name for your device, used anywhere it identifies itself (currently, the device field sent to a KOReader Sync server) instead of a generic default.
 
+### Reading Stats *(new in v1.3.2)*
+
+Optional — **Settings → System → Track Reading Stats** (off by default). Tracks per-book and rolling all-books reading time, forward-page pace, and an estimated time-left for the book you're currently in. Turning it on adds a **Reading Stats** entry to the reader menu's Main tab — sessions, time read, pages turned, and time left for the current book, plus an all-time total across every book — and shows a time-read/time-left label under each cover's progress bar on the Lyra Carousel.
+
 ### Smarter sleep behavior
 
 Quick Resume now only applies when you're actually reading. If the device sleeps while browsing a grid, list, or menu, it shows the normal sleep screen instead of trying to resume a page that doesn't exist — which also avoids a wasted state-save and a flash of stale content on wake. Upstream's timeout-vs-manual Quick Resume options still apply while reading.
