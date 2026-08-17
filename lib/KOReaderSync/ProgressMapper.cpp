@@ -799,8 +799,36 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   // Use ancestry mode whenever the XPath has a structured path (always more accurate than global counting).
   const bool useAncestry = xpathStepCount > 0;
 
+  // Whether the XPath's structural steps (p[N], div[N], ... below) can be trusted to resolve a
+  // paragraph within result.spineIndex. False whenever the spine was chosen (or corrected) by
+  // byte position instead of the XPath's own DocFragment number -- those steps were authored
+  // against the uploader's document, not necessarily this one, so matching them here could hit
+  // unrelated content that just happens to share a similar tag shape.
+  bool xpathSpineTrusted = false;
+
   if (xpathSpine >= 0 && xpathSpine < spineCount) {
     result.spineIndex = xpathSpine;
+    xpathSpineTrusted = true;
+
+    // The XPath's DocFragment numbering is the uploader's own spine list, which doesn't always
+    // line up 1:1 with this device's (different EPUB parse/split, or a KOReader doc-fragment
+    // boundary that doesn't match ours). When the byte offset implied by the synced percentage
+    // falls outside this spine's own byte range, the XPath spine guess is simply wrong for this
+    // book -- trust the percentage's byte position instead of silently mismapping into whatever
+    // spine the wrong index happens to land on.
+    const size_t xpathPrevCum = (result.spineIndex > 0) ? epub->getCumulativeSpineItemSize(result.spineIndex - 1) : 0;
+    const size_t xpathSpineEnd = epub->getCumulativeSpineItemSize(result.spineIndex);
+    if (targetBytes < xpathPrevCum || targetBytes > xpathSpineEnd) {
+      LOG_DBG("PM", "XPath spine %d byte range [%zu,%zu) doesn't contain target byte %zu -- using byte position",
+              result.spineIndex, xpathPrevCum, xpathSpineEnd, targetBytes);
+      xpathSpineTrusted = false;
+      for (int i = 0; i < spineCount; i++) {
+        if (epub->getCumulativeSpineItemSize(i) >= targetBytes) {
+          result.spineIndex = i;
+          break;
+        }
+      }
+    }
   } else {
     for (int i = 0; i < spineCount; i++) {
       if (epub->getCumulativeSpineItemSize(i) >= targetBytes) {
@@ -836,7 +864,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
 
   float intra = 0.0f;
   bool resolvedIntra = false;
-  if (useAncestry) {
+  if (useAncestry && xpathSpineTrusted) {
     ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
@@ -862,7 +890,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
               intra * 100, s.getTargetVisChars(), s.getTotalVisChars(), pAtMatch,
               result.hasLiIndex ? static_cast<int>(result.liIndex) : 0, anchorId ? anchorId : "none");
     }
-  } else if (xpathP > 0) {
+  } else if (xpathP > 0 && xpathSpineTrusted) {
     ParagraphStreamer s(xpathP, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
@@ -871,7 +899,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
               intra * 100, s.getTargetVisChars(), s.getTotalVisChars());
     }
   }
-  if (!resolvedIntra && xpathSpine >= 0 && xpathSpine < spineCount && isChapterStartXPath(koPos.xpath)) {
+  if (!resolvedIntra && xpathSpineTrusted && isChapterStartXPath(koPos.xpath)) {
     intra = 0.0f;
     resolvedIntra = true;
     LOG_DBG("PM", "Chapter-start XPath %s -> spine=%d page start", koPos.xpath.c_str(), result.spineIndex);
@@ -937,6 +965,29 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       }
     }
   }
+
+  // A one-page spine has no intra-chapter granularity: intra * (totalPages - 1) collapses to
+  // page 0 no matter what intra is (0 or 0.99, doesn't matter -- totalPages-1 == 0). That's
+  // silently indistinguishable from "no progress" whenever the source position is anywhere past
+  // this spine's very start -- e.g. one XHTML file whose embedded images/markup account for many
+  // percentage-points of book bytes but renders to a single page locally. There is no page
+  // granularity available to express "partway through" here, so any measurable byte progress
+  // beyond the spine's opening (intra > 0) is treated as "past it": land on the next spine's
+  // opening page instead of reporting the current one back -- a real forward jump beats an
+  // apply that visibly does nothing.
+  if (result.totalPages <= 1 && intra > 0.0f && result.spineIndex + 1 < spineCount) {
+    const int fromSpine = result.spineIndex;
+    result.spineIndex++;
+    result.pageNumber = 0;
+    result.hasParagraphIndex = false;
+    result.hasLiIndex = false;
+    result.xpathAnchorId[0] = '\0';
+    Section nextSection(epub, result.spineIndex, renderer);
+    result.totalPages = nextSection.getCachedPageCount().value_or(1);
+    LOG_DBG("PM", "Spine %d has only 1 page but intra=%.2f -- advancing to spine %d (page 0/%d)", fromSpine, intra,
+            result.spineIndex, result.totalPages);
+  }
+
   return result;
 }
 
