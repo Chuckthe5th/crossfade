@@ -14,6 +14,11 @@ class HalStorage {
  public:
   HalStorage();
   bool begin();
+  // Quiesce the SD card before a power transition the MCU doesn't control
+  // (deep sleep). See SDCardManager::end() for what this actually does and
+  // its limits. Safe to call whether or not the card is mounted; a later
+  // begin() (e.g. on wake) re-initializes from scratch regardless.
+  void end();
   bool ready() const;
   std::vector<String> listFiles(const char* path = "/", int maxFiles = 200);
   // Read the entire file at `path` into a String. Returns empty string on failure.

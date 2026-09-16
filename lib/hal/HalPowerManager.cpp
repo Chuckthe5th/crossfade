@@ -58,23 +58,39 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+#if !SOC_PM_SUPPORT_EXT1_WAKEUP
+  if (gpio.isXteinkDevice()) {
+    // GPIO13 gates the battery MOSFET on both Xteink C3 boards; driving it low
+    // is the battery power-off (the SDK wake source still handles USB power).
+    // Release any surviving pad hold first: hold_en survives deep sleep via
+    // the SDK's deepSleep() (esp_sleep_config_gpio_isolate +
+    // gpio_deep_sleep_hold_en), and a held pad silently ignores the drive.
+    //
+    // Must run before gpio_deep_sleep_hold_en() -- called later in this
+    // function, via the deepSleepUntilPowerButton() -> deepSleep() call below
+    // (PowerManager.cpp) -- which is what makes every currently-armed
+    // gpio_hold_en() latch through the sleep window. Getting that order
+    // backwards would arm the global latch before this pin's hold exists,
+    // silently dropping it.
+    constexpr gpio_num_t XTEINK_C3_GPIO13 = GPIO_NUM_13;
+    gpio_hold_dis(XTEINK_C3_GPIO13);
+    gpio_set_direction(XTEINK_C3_GPIO13, GPIO_MODE_OUTPUT);
+    gpio_set_level(XTEINK_C3_GPIO13, 0);
+    gpio_hold_en(XTEINK_C3_GPIO13);
+  }
+#endif
+
 #ifdef ENABLE_SERIAL_LOG
   // Tear down HWCDC so the host sees a clean disconnect and the peripheral
   // doesn't hold power domains that interfere with USB-powered GPIO wake.
   // logSerial is the raw HWCDC reference; Serial is the MySerialImpl proxy
-  // (which doesn't expose end()).
+  // (which doesn't expose end()). flush() first: end() disables the TX
+  // interrupt and frees the ring buffer immediately, with no drain -- any
+  // bytes still in flight are silently dropped otherwise. flush() blocks
+  // until the ring buffer actually empties (bounded by tx_timeout_ms, set in
+  // setup(), so it won't hang if the host is gone).
+  logSerial.flush();
   logSerial.end();
-#endif
-
-#if !SOC_PM_SUPPORT_EXT1_WAKEUP
-  if (gpio.isXteinkDevice() && !gpio.deviceIsX3()) {
-    // X4 GPIO13 is connected to the battery latch MOSFET. Keeping it low powers
-    // the MCU off on battery, while the SDK wake source still handles USB power.
-    constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
-    gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_SPIWP, 0);
-    gpio_hold_en(GPIO_SPIWP);
-  }
 #endif
 
   // Cut the gated peripheral rails (touch/SD/EPD on boards like the Sticky) and

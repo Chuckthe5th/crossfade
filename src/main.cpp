@@ -244,6 +244,20 @@ void enterDeepSleep(bool fromTimeout = false) {
 
   halTiltSensor.deepSleep();
   display.deepSleep();
+
+  // Quiesce the SD card before sleep. This gets the card deselected and out
+  // of an active SPI transaction first, rather than losing the bus
+  // mid-command. Must run after display.deepSleep(): SD and the panel share
+  // one SPI object (sclk/mosi), and the panel's own deep-sleep command needs
+  // it first. Not gated to X3 -- the pin resolution goes through
+  // BoardConfig::ACTIVE like begin() does, so it's a no-op wherever SD_CS is
+  // unassigned. X3's SD Vcc is gated by GPIO13 (BoardConfig::ACTIVE.sd.powerEnable);
+  // HalPowerManager::startDeepSleep() drives that pin low and holds it after
+  // this call returns, cutting the rail. Deep sleep is a full chip reset
+  // either way, so the next boot's HalStorage::begin() re-initializes from
+  // scratch regardless of this call.
+  Storage.end();
+
   LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);

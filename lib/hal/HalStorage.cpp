@@ -39,6 +39,11 @@ class HalStorage::StorageLock {
   HalStorage::StorageLock lock;               \
   return SDCard.method(__VA_ARGS__);
 
+// Sleep-entry teardown; not performance-sensitive, so it takes the lock like
+// the rest of the wrapped calls here rather than following begin()/ready()'s
+// no-mutex-needed convention above.
+void HalStorage::end() { HAL_STORAGE_WRAPPED_CALL(end); }
+
 std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) {
   HAL_STORAGE_WRAPPED_CALL(listFiles, path, maxFiles);
 }
